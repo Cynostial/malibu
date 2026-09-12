@@ -1,0 +1,7 @@
+.DS_Store
+build/
+Payload/
+*.ipa
+*.xcarchive
+*.xcresult
+.spectacles-key

@@ -1,0 +1,7 @@
+Malibu third-party material notice
+
+The Swift and C source identified by its CPAL-1.0 notices is Original Code by Leon M'laiel (Cynostial).
+
+Malibu/ProofVM.bin is a compatibility asset generated during interoperability research from a legacy native component. It is not Original Code, is not covered by the CPAL-1.0 grant, and Malibu's contributors do not claim ownership of third-party material represented within it.
+
+The repository must remain private while that asset is present unless its redistribution rights are established. A fully open-source public release requires a clean-room replacement or another independently redistributable implementation of the pairing-proof operation.

@@ -1,0 +1,226 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		100000000000000000000001 /* MalibuApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000001 /* MalibuApp.swift */; };
+		100000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000002 /* ContentView.swift */; };
+		100000000000000000000003 /* DeviceProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000003 /* DeviceProfile.swift */; };
+		100000000000000000000004 /* Support.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000004 /* Support.swift */; };
+		100000000000000000000005 /* Protobuf.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000005 /* Protobuf.swift */; };
+		100000000000000000000006 /* PacketCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000006 /* PacketCrypto.swift */; };
+		100000000000000000000007 /* SpectaclesBLE.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000007 /* SpectaclesBLE.swift */; };
+		100000000000000000000009 /* AMBAClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000009 /* AMBAClient.swift */; };
+		10000000000000000000000A /* PhotosSaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000A /* PhotosSaver.swift */; };
+		10000000000000000000000B /* SpectaclesController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000B /* SpectaclesController.swift */; };
+		10000000000000000000000C /* ProtocolSelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20000000000000000000000F /* ProtocolSelfTest.swift */; };
+		10000000000000000000000D /* PairingCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000010 /* PairingCrypto.swift */; };
+		10000000000000000000000E /* ProofVM.c in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000011 /* ProofVM.c */; };
+		10000000000000000000000F /* ProofVM.bin in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000014 /* ProofVM.bin */; };
+		100000000000000000000010 /* HotspotConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000015 /* HotspotConnector.swift */; };
+		100000000000000000000011 /* AccessorySetupConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000017 /* AccessorySetupConnector.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		200000000000000000000001 /* MalibuApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MalibuApp.swift; sourceTree = "<group>"; };
+		200000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		200000000000000000000003 /* DeviceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceProfile.swift; sourceTree = "<group>"; };
+		200000000000000000000004 /* Support.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Support.swift; sourceTree = "<group>"; };
+		200000000000000000000005 /* Protobuf.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protobuf.swift; sourceTree = "<group>"; };
+		200000000000000000000006 /* PacketCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketCrypto.swift; sourceTree = "<group>"; };
+		200000000000000000000007 /* SpectaclesBLE.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectaclesBLE.swift; sourceTree = "<group>"; };
+		200000000000000000000009 /* AMBAClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AMBAClient.swift; sourceTree = "<group>"; };
+		20000000000000000000000A /* PhotosSaver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosSaver.swift; sourceTree = "<group>"; };
+		20000000000000000000000B /* SpectaclesController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectaclesController.swift; sourceTree = "<group>"; };
+		20000000000000000000000C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		20000000000000000000000E /* Malibu.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Malibu.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		20000000000000000000000F /* ProtocolSelfTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtocolSelfTest.swift; sourceTree = "<group>"; };
+		200000000000000000000010 /* PairingCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingCrypto.swift; sourceTree = "<group>"; };
+		200000000000000000000011 /* ProofVM.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ProofVM.c; sourceTree = "<group>"; };
+		200000000000000000000012 /* ProofVM.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ProofVM.h; sourceTree = "<group>"; };
+		200000000000000000000013 /* Malibu-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Malibu-Bridging-Header.h"; sourceTree = "<group>"; };
+		200000000000000000000014 /* ProofVM.bin */ = {isa = PBXFileReference; lastKnownFileType = file; path = ProofVM.bin; sourceTree = "<group>"; };
+		200000000000000000000015 /* HotspotConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotspotConnector.swift; sourceTree = "<group>"; };
+		200000000000000000000016 /* Malibu.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Malibu.entitlements; sourceTree = "<group>"; };
+		200000000000000000000017 /* AccessorySetupConnector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessorySetupConnector.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		300000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		400000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				400000000000000000000002 /* Malibu */,
+				400000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		400000000000000000000002 /* Malibu */ = {
+			isa = PBXGroup;
+			children = (
+				200000000000000000000001 /* MalibuApp.swift */,
+				200000000000000000000002 /* ContentView.swift */,
+				20000000000000000000000B /* SpectaclesController.swift */,
+				200000000000000000000007 /* SpectaclesBLE.swift */,
+				200000000000000000000010 /* PairingCrypto.swift */,
+				200000000000000000000011 /* ProofVM.c */,
+				200000000000000000000012 /* ProofVM.h */,
+				200000000000000000000013 /* Malibu-Bridging-Header.h */,
+				200000000000000000000014 /* ProofVM.bin */,
+				200000000000000000000009 /* AMBAClient.swift */,
+				200000000000000000000015 /* HotspotConnector.swift */,
+				200000000000000000000017 /* AccessorySetupConnector.swift */,
+				20000000000000000000000A /* PhotosSaver.swift */,
+				200000000000000000000006 /* PacketCrypto.swift */,
+				200000000000000000000005 /* Protobuf.swift */,
+				200000000000000000000003 /* DeviceProfile.swift */,
+				200000000000000000000004 /* Support.swift */,
+				20000000000000000000000F /* ProtocolSelfTest.swift */,
+				20000000000000000000000C /* Info.plist */,
+				200000000000000000000016 /* Malibu.entitlements */,
+			);
+			path = Malibu;
+			sourceTree = "<group>";
+		};
+		400000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (20000000000000000000000E /* Malibu.app */,);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		500000000000000000000001 /* Malibu */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 900000000000000000000002 /* Build configuration list for PBXNativeTarget */;
+			buildPhases = (
+				700000000000000000000001 /* Sources */,
+				300000000000000000000001 /* Frameworks */,
+				700000000000000000000002 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = Malibu;
+			productName = Malibu;
+			productReference = 20000000000000000000000E /* Malibu.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		600000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					500000000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = 900000000000000000000001 /* Build configuration list for PBXProject */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base,);
+			mainGroup = 400000000000000000000001;
+			productRefGroup = 400000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (500000000000000000000001 /* Malibu */,);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		700000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (10000000000000000000000F /* ProofVM.bin in Resources */,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		700000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000001,
+				100000000000000000000002,
+				100000000000000000000003,
+				100000000000000000000004,
+				100000000000000000000005,
+				100000000000000000000006,
+				100000000000000000000007,
+				100000000000000000000009,
+				10000000000000000000000A,
+				10000000000000000000000B,
+				10000000000000000000000C,
+				10000000000000000000000D,
+				10000000000000000000000E,
+				100000000000000000000010,
+				100000000000000000000011,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		800000000000000000000001 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; ENABLE_TESTABILITY = YES; IPHONEOS_DEPLOYMENT_TARGET = 18.0; SDKROOT = iphoneos; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
+		800000000000000000000002 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; IPHONEOS_DEPLOYMENT_TARGET = 18.0; SDKROOT = iphoneos; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_OPTIMIZATION_LEVEL = "-O"; }; name = Release; };
+		800000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Malibu/Malibu.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 8;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Malibu/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 1.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.cynostial.Malibu;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Malibu/Malibu-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		800000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Malibu/Malibu.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 8;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Malibu/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 1.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.cynostial.Malibu;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Malibu/Malibu-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		900000000000000000000001 = {isa = XCConfigurationList; buildConfigurations = (800000000000000000000001, 800000000000000000000002,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		900000000000000000000002 = {isa = XCConfigurationList; buildConfigurations = (800000000000000000000003, 800000000000000000000004,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = 600000000000000000000001 /* Project object */;
+}
