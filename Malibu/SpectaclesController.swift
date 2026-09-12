@@ -123,11 +123,24 @@ final class SpectaclesController: ObservableObject {
         var ble: SpectaclesBLE?
         var paired = false
         do {
+            let networkSSID: String
+            if let existingKey = PairingKeyStore.loadKey(),
+               let existingIdentifier = PairingKeyStore.loadPeripheralIdentifier() {
+                networkSSID = makeImportCredentials(
+                    encryptionKey: existingKey,
+                    peripheralIdentifier: existingIdentifier
+                ).ssid
+            } else {
+                networkSSID = try PairingKeyStore.makeNetworkSSID()
+            }
+
             var selectedIdentifier: UUID?
             if #available(iOS 18.0, *) {
                 status = "Choose your Spectacles once"
                 detail = "Use the iPhone accessory card to give Malibu Bluetooth and Wi-Fi access."
-                selectedIdentifier = try await AccessorySetupConnector.shared.selectSpectaclesForPairing()
+                selectedIdentifier = try await AccessorySetupConnector.shared.selectSpectaclesForPairing(
+                    ssid: networkSSID
+                )
             }
 
             let connection = SpectaclesBLE()
@@ -144,7 +157,11 @@ final class SpectaclesController: ObservableObject {
             detail = "Exchanging keys with Spectacles 2. This can take a few seconds."
             let localUserID = try PairingKeyStore.localUserID()
             let key = try await connection.pair(localUserID: localUserID)
-            try PairingKeyStore.save(key: key, peripheralIdentifier: peripheralIdentifier)
+            try PairingKeyStore.save(
+                key: key,
+                peripheralIdentifier: peripheralIdentifier,
+                networkSSID: networkSSID
+            )
 
             if #available(iOS 18.0, *) {
                 let credentials = makeImportCredentials(
@@ -345,14 +362,14 @@ final class SpectaclesController: ObservableObject {
 
             let ssid = credentials.ssid
             let password = credentials.password
-            status = "Starting the glasses’ Wi-Fi…"
-            detail = "Malibu uses the same private network for this pairing every time."
+            status = "Starting Specs Wi-Fi"
+            detail = "The saved network name and password are reused for this pairing."
             try await ble.startAccessPoint(ssid: ssid, password: password)
 
             needsWiFiJoin = true
             importPhase = .switchingWiFi
-            status = "Switching to the glasses’ Wi-Fi…"
-            detail = "Malibu is asking iOS to move this import onto the glasses network."
+            status = "Joining Specs Wi-Fi"
+            detail = "iOS is joining the accessory network approved during setup."
 
             try await HotspotConnector().join(
                 ssid: ssid,
@@ -363,8 +380,8 @@ final class SpectaclesController: ObservableObject {
             do {
                 try await media.connectAndSetupWithRetry(maxAttempts: 4)
             } catch {
-                status = "Finishing the Wi-Fi connection…"
-                detail = "The network is saved. Malibu is giving iOS another moment to route the import."
+                status = "Waiting for Specs Wi-Fi"
+                detail = "The network is approved. iOS is finishing the connection."
                 try await media.connectAndSetupWithRetry(maxAttempts: 4)
             }
             needsWiFiJoin = false
@@ -476,7 +493,8 @@ final class SpectaclesController: ObservableObject {
             .prefix(3)
             .map { String(format: "%02X", $0) }
             .joined()
-        let ssid = "Malibu-\(peripheralPart)-\(keyPart)"
+        let legacySSID = "Malibu-\(peripheralPart)-\(keyPart)"
+        let ssid = PairingKeyStore.loadNetworkSSID() ?? legacySSID
         let password = HMAC<SHA256>.authenticationCode(
             for: Data("Malibu Wi-Fi".utf8),
             using: SymmetricKey(data: encryptionKey)
@@ -493,17 +511,13 @@ final class SpectaclesController: ObservableObject {
     }
 
     private func videoThumbnail(for url: URL) async -> UIImage? {
-        await Task.detached(priority: .utility) {
-            let asset = AVURLAsset(url: url)
-            let generator = AVAssetImageGenerator(asset: asset)
-            generator.appliesPreferredTrackTransform = true
-            generator.maximumSize = CGSize(width: 420, height: 420)
-            let time = CMTime(seconds: 0.2, preferredTimescale: 600)
-            guard let image = try? generator.copyCGImage(at: time, actualTime: nil) else {
-                return nil
-            }
-            return UIImage(cgImage: image)
-        }.value
+        let asset = AVURLAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 420, height: 420)
+        let time = CMTime(seconds: 0.2, preferredTimescale: 600)
+        guard let result = try? await generator.image(at: time) else { return nil }
+        return UIImage(cgImage: result.image)
     }
 
     private func videoDirectory() throws -> URL {

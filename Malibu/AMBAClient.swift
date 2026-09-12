@@ -54,7 +54,7 @@ final class AMBAClient {
                 try await setupEncryption()
                 return
             } catch {
-                lastError = transportError(error, action: "connecting to the glasses")
+                lastError = Self.transportError(error, action: "connecting to the glasses")
                 resetConnection()
                 if attempt < maxAttempts - 1 {
                     try await Task.sleep(nanoseconds: 750_000_000)
@@ -118,7 +118,7 @@ final class AMBAClient {
             do {
                 return try await listClips()
             } catch {
-                lastError = transportError(error, action: "reading the video list")
+                lastError = Self.transportError(error, action: "reading the video list")
                 guard attempt < maxAttempts - 1 else { break }
                 try await connectAndSetupWithRetry(maxAttempts: 2)
             }
@@ -163,7 +163,7 @@ final class AMBAClient {
                     )
                     break
                 } catch {
-                    lastError = transportError(error, action: "downloading byte \(offset)")
+                    lastError = Self.transportError(error, action: "downloading byte \(offset)")
                     guard attempt < 1 else { break }
                     try await connectAndSetupWithRetry(maxAttempts: 2)
                 }
@@ -238,7 +238,7 @@ final class AMBAClient {
                     if gate.claim() { continuation.resume() }
                 case .failed(let error):
                     if gate.claim() {
-                        continuation.resume(throwing: self.transportError(error, action: "opening the media connection"))
+                        continuation.resume(throwing: Self.transportError(error, action: "opening the media connection"))
                     }
                 case .cancelled:
                     if gate.claim() {
@@ -293,7 +293,7 @@ final class AMBAClient {
             connection.send(content: data, completion: .contentProcessed { error in
                 guard gate.claim() else { return }
                 if let error {
-                    continuation.resume(throwing: self.transportError(error, action: "sending a media request"))
+                    continuation.resume(throwing: Self.transportError(error, action: "sending a media request"))
                 } else {
                     continuation.resume()
                 }
@@ -325,7 +325,7 @@ final class AMBAClient {
             connection.receive(minimumIncompleteLength: 1, maximumLength: maximum) { data, _, complete, error in
                 guard gate.claim() else { return }
                 if let error {
-                    continuation.resume(throwing: self.transportError(error, action: "receiving video data"))
+                    continuation.resume(throwing: Self.transportError(error, action: "receiving video data"))
                 } else if let data {
                     continuation.resume(returning: data)
                 } else if complete {
@@ -379,7 +379,7 @@ final class AMBAClient {
         crypto = nil
     }
 
-    private func transportError(_ error: Error, action: String) -> Error {
+    private static func transportError(_ error: Error, action: String) -> Error {
         if let malibuError = error as? MalibuError {
             return malibuError
         }

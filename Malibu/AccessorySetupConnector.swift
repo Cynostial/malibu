@@ -20,10 +20,12 @@ final class AccessorySetupConnector {
 
     private init() {}
 
-    func selectSpectaclesForPairing() async throws -> UUID {
+    func selectSpectaclesForPairing(ssid: String) async throws -> UUID {
         try await activate()
 
-        if let existing = session.accessories.first(where: { $0.bluetoothIdentifier != nil }),
+        if let existing = session.accessories.first(where: {
+            $0.state == .authorized && $0.bluetoothIdentifier != nil && $0.ssid == ssid
+        }),
            let identifier = existing.bluetoothIdentifier {
             return identifier
         }
@@ -33,7 +35,7 @@ final class AccessorySetupConnector {
 
         let descriptor = ASDiscoveryDescriptor()
         descriptor.bluetoothServiceUUID = DeviceProfile.bleService
-        descriptor.ssidPrefix = "Malibu-"
+        descriptor.ssid = ssid
 
         let displayItem = ASPickerDisplayItem(
             name: "Malibu Spectacles",
@@ -42,15 +44,75 @@ final class AccessorySetupConnector {
         )
         try await session.showPicker(for: [displayItem])
 
+        if let identifier = try await waitForSelectedIdentifier() {
+            return identifier
+        }
         if let eventError {
             throw eventError
         }
-        guard let identifier = eventAccessory?.bluetoothIdentifier else {
+        throw MalibuError.bluetoothUnavailable(
+            "the one-time iPhone accessory setup was closed before the glasses were selected"
+        )
+    }
+
+    private func waitForSelectedIdentifier() async throws -> UUID? {
+        for _ in 0..<20 {
+            if let identifier = eventAccessory?.bluetoothIdentifier {
+                return identifier
+            }
+            if eventError != nil {
+                return nil
+            }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return nil
+    }
+
+    private func waitForMatchingAccessory(
+        peripheralIdentifier: UUID,
+        ssid: String
+    ) async throws -> ASAccessory? {
+        for _ in 0..<20 {
+            if let accessory = eventAccessory
+                ?? matchingAccessory(peripheralIdentifier: peripheralIdentifier, ssid: ssid) {
+                return accessory
+            }
+            if eventError != nil {
+                return nil
+            }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return nil
+    }
+
+    private func waitForAuthorizedAccessory(
+        peripheralIdentifier: UUID,
+        ssid: String
+    ) async throws -> ASAccessory? {
+        for _ in 0..<20 {
+            if let accessory = authorizedAccessory(
+                peripheralIdentifier: peripheralIdentifier,
+                ssid: ssid
+            ) {
+                return accessory
+            }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return nil
+    }
+
+    private func requireAuthorizationCompletion(
+        peripheralIdentifier: UUID,
+        ssid: String
+    ) async throws {
+        guard try await waitForAuthorizedAccessory(
+            peripheralIdentifier: peripheralIdentifier,
+            ssid: ssid
+        ) != nil else {
             throw MalibuError.bluetoothUnavailable(
-                "the one-time iPhone accessory setup was closed before the glasses were selected"
+                "iOS did not finish the one-time Spectacles network authorization"
             )
         }
-        return identifier
     }
 
     func isAuthorized(peripheralIdentifier: UUID, ssid: String) async throws -> Bool {
@@ -69,6 +131,10 @@ final class AccessorySetupConnector {
             ssid: ssid
         ), existing.state == .awaitingAuthorization {
             try await finishAuthorization(for: existing, ssid: ssid)
+            try await requireAuthorizationCompletion(
+                peripheralIdentifier: peripheralIdentifier,
+                ssid: ssid
+            )
             return
         }
 
@@ -92,8 +158,10 @@ final class AccessorySetupConnector {
             throw eventError
         }
 
-        guard let accessory = eventAccessory
-                ?? matchingAccessory(peripheralIdentifier: peripheralIdentifier, ssid: ssid)
+        guard let accessory = try await waitForMatchingAccessory(
+            peripheralIdentifier: peripheralIdentifier,
+            ssid: ssid
+        )
         else {
             throw MalibuError.networkFailure(
                 "the one-time iPhone accessory approval was closed before Malibu was authorized"
@@ -104,11 +172,10 @@ final class AccessorySetupConnector {
             try await finishAuthorization(for: accessory, ssid: ssid)
         }
 
-        guard authorizedAccessory(peripheralIdentifier: peripheralIdentifier, ssid: ssid) != nil else {
-            throw MalibuError.networkFailure(
-                "iOS did not finish the one-time Spectacles network authorization"
-            )
-        }
+        try await requireAuthorizationCompletion(
+            peripheralIdentifier: peripheralIdentifier,
+            ssid: ssid
+        )
     }
 
     func join(peripheralIdentifier: UUID, ssid: String, password: String) async throws {

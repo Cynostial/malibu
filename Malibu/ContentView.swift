@@ -186,9 +186,9 @@ struct ContentView: View {
 
     private var wifiCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Joining the glasses", systemImage: "wifi")
+            Label("Joining Specs Wi-Fi", systemImage: "wifi")
                 .font(.headline)
-            Text("Malibu is moving the import to the Spectacles network automatically. Stay in the app.")
+            Text("iOS is connecting to the accessory network approved during setup.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -584,17 +584,13 @@ private struct CircularVideoThumbnail: View {
     }
 
     private func makeThumbnail() async -> UIImage? {
-        await Task.detached(priority: .utility) {
-            let asset = AVURLAsset(url: url)
-            let generator = AVAssetImageGenerator(asset: asset)
-            generator.appliesPreferredTrackTransform = true
-            generator.maximumSize = CGSize(width: 180, height: 180)
-            let time = CMTime(seconds: 0.2, preferredTimescale: 600)
-            guard let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) else {
-                return nil
-            }
-            return UIImage(cgImage: cgImage)
-        }.value
+        let asset = AVURLAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 180, height: 180)
+        let time = CMTime(seconds: 0.2, preferredTimescale: 600)
+        guard let result = try? await generator.image(at: time) else { return nil }
+        return UIImage(cgImage: result.image)
     }
 }
 

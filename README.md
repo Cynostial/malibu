@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="malibu.png" alt="Malibu: an independent iPhone importer for Spectacles 2" width="100%">
-</p>
-
 # Malibu
 
 **An independent iPhone app for pairing with Spectacles 2 and importing their videos directly into Photos and Files.**
@@ -81,6 +77,16 @@ Pairing mode remains available for a limited time, so tap **Pair Spectacles** sh
 
 Malibu does not use a PIN, Snapcode, camera scan, Snapchat login, or the Bluetooth page in iOS Settings. It performs the Spectacles 2 pairing exchange directly.
 
+## Reverse engineering
+
+Malibu started as a Windows probe for hardware that had outlived its supported software. The protocol was recovered in layers: Bluetooth advertisements revealed the `050` pairing marker, GATT captures identified the FE45 service and UART-style characteristics, and packet traces exposed a four-byte command frame split across BLE notifications.
+
+Static inspection of the retired client showed that command payloads and media records use protobuf. Controlled requests then mapped the X25519 exchange, proof envelope, AES-GCM session setup, access-point controls, media catalogue, thumbnail records, and MP4 byte ranges. Runtime traces through the legacy native pairing routine established the exact nonce ordering and key inputs. Those findings were reproduced independently in Python before the transport was implemented in Swift.
+
+The implementation includes deterministic vectors for protobuf, AES-GCM, and the pairing proof path. Length checks, authenticated packets, bounded downloads, fresh nonces after reconnects, and exact final-size validation turn the recovered protocol into a client that can safely resume interrupted transfers.
+
+The complete field maps, byte order, command sequence, cryptographic derivation, media framing, and remaining unknowns are documented in [`docs/protocol.md`](docs/protocol.md).
+
 ## Importing videos
 
 1. Pair the glasses once with Malibu and Apple's accessory card.
@@ -118,7 +124,7 @@ During fresh pairing, Malibu performs an X25519 key exchange, completes the Spec
 
 During setup, Malibu uses `AccessorySetupKit` to authorize the glasses as one Bluetooth and Wi-Fi accessory. During an import, Malibu authenticates over Bluetooth, asks the glasses to create a WPA2 access point with credentials derived from the saved pairing, and uses `joinAccessoryHotspot` to join that approved accessory automatically. It then connects to the media service at `192.168.42.1:1234`, downloads the clip's dedicated thumbnail file, and transfers the MP4. Media commands and downloaded blocks remain on the local network. If the connection drops, Malibu creates a fresh encrypted media session and resumes the partial video.
 
-See [`docs/protocol.md`](docs/protocol.md) for the protocol overview.
+See [`docs/protocol.md`](docs/protocol.md) for the full reverse-engineered wire specification.
 
 ## Privacy
 
@@ -132,13 +138,9 @@ Hardware reports, protocol research, documentation, and code contributions are w
 
 Never publish pairing keys, Apple credentials, complete device serial numbers, or private videos.
 
-## License and attribution
+## License
 
-Malibu's original source code is released under the [Common Public Attribution License 1.0](LICENSE). CPAL-1.0 is an [OSI-approved open-source license](https://opensource.org/license/CPAL-1.0).
-
-The license requires every source distribution, executable, modification, and larger work to preserve a prominent launch-time attribution to **Leon M'laiel (Cynostial)**. The existing in-app credit is required attribution and must not be removed or obscured.
-
-The current development build contains a compatibility asset that is outside the CPAL grant. Its status and the work required before a fully libre public release are documented in [`LEGAL`](LEGAL).
+[CPAL-1.0](LICENSE)
 
 ## Trademark notice
 

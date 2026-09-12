@@ -106,6 +106,7 @@ enum PairingKeyStore {
     private static let keyAccount = "packet-encryption-key"
     private static let peripheralAccount = "bluetooth-peripheral-identifier"
     private static let userAccount = "local-user-identifier"
+    private static let networkAccount = "wifi-network-name"
 
     static func loadKey() -> Data? {
         guard let key = load(account: keyAccount), key.count == 16 else { return nil }
@@ -117,6 +118,22 @@ enum PairingKeyStore {
               let value = String(data: data, encoding: .utf8)
         else { return nil }
         return UUID(uuidString: value)
+    }
+
+    static func loadNetworkSSID() -> String? {
+        guard let data = load(account: networkAccount),
+              let value = String(data: data, encoding: .utf8),
+              value.hasPrefix("Malibu-"),
+              value.count <= 32
+        else { return nil }
+        return value
+    }
+
+    static func makeNetworkSSID() throws -> String {
+        let suffix = try Data.secureRandom(count: 4)
+            .map { String(format: "%02X", $0) }
+            .joined()
+        return "Malibu-\(suffix)"
     }
 
     static func localUserID() throws -> String {
@@ -132,10 +149,14 @@ enum PairingKeyStore {
         return value
     }
 
-    static func save(key: Data, peripheralIdentifier: UUID) throws {
+    static func save(key: Data, peripheralIdentifier: UUID, networkSSID: String) throws {
         guard key.count == 16 else {
             throw MalibuError.protocolFailure("refusing to save an invalid Spectacles key")
         }
+        guard networkSSID.hasPrefix("Malibu-"), networkSSID.count <= 32 else {
+            throw MalibuError.protocolFailure("refusing to save an invalid Spectacles network name")
+        }
+        try save(Data(networkSSID.utf8), account: networkAccount)
         try save(key, account: keyAccount)
         try save(Data(peripheralIdentifier.uuidString.utf8), account: peripheralAccount)
     }
@@ -170,7 +191,7 @@ enum PairingKeyStore {
     }
 
     static func delete() {
-        for account in [keyAccount, peripheralAccount, userAccount] {
+        for account in [keyAccount, peripheralAccount, userAccount, networkAccount] {
             let query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: service,
