@@ -198,13 +198,68 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Specs Wi-Fi", systemImage: "wifi")
                 .font(.headline)
-            Text("If Malibu opens Wi-Fi settings, tap the Malibu network shown above and return. The active glasses connection stays open and importing continues automatically.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if let ssid = controller.manualWiFiSSID,
+               let password = controller.manualWiFiPassword {
+                Text("Malibu keeps this screen and the glasses connection ready while you switch networks.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                wifiDetailRow(title: "Network", value: ssid) {
+                    controller.copyManualWiFiSSID()
+                }
+                wifiDetailRow(title: "Password", value: password) {
+                    controller.copyManualWiFiPassword()
+                }
+
+                Button {
+                    controller.openWiFiSettings()
+                } label: {
+                    Label("Copy password and open Wi-Fi", systemImage: "arrow.up.forward.app")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.cyan)
+
+                if controller.awaitingManualWiFi {
+                    Button("Continue after connecting") {
+                        controller.resumeManualWiFiImport()
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            } else {
+                Text("iOS is connecting to the accessory network approved during setup.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(16)
         .background(Color.cyan.opacity(0.10), in: RoundedRectangle(cornerRadius: 18))
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.cyan.opacity(0.35)))
+    }
+
+    private func wifiDetailRow(
+        title: String,
+        value: String,
+        copy: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.footnote.monospaced())
+                    .textSelection(.enabled)
+            }
+            Spacer(minLength: 8)
+            Button(action: copy) {
+                Image(systemName: "doc.on.doc")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Copy \(title.lowercased())")
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder

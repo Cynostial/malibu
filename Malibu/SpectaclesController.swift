@@ -63,6 +63,9 @@ final class SpectaclesController: ObservableObject {
     @Published var isRefreshingDeviceInfo = false
     @Published var deviceInfo = SpectaclesDeviceInfo()
     @Published var lastSyncDate: Date?
+    @Published var manualWiFiSSID: String?
+    @Published var manualWiFiPassword: String?
+    @Published var awaitingManualWiFi = false
 
     private var operationTask: Task<Void, Never>?
     private var liveSyncTask: Task<Void, Never>?
@@ -71,8 +74,7 @@ final class SpectaclesController: ObservableObject {
     private var didStartAutomatically = false
     private var isForeground = true
     private var isSyncInFlight = false
-    private var isOpeningWiFiSettings = false
-    private var didReturnFromWiFiSettings = false
+    private var didLeaveForManualWiFi = false
     private var wiFiSettingsContinuation: CheckedContinuation<Void, Never>?
 
     init() {
@@ -97,14 +99,8 @@ final class SpectaclesController: ObservableObject {
 
     func sceneBecameActive() {
         isForeground = true
-        if isOpeningWiFiSettings {
-            didReturnFromWiFiSettings = true
-            if let continuation = wiFiSettingsContinuation {
-                wiFiSettingsContinuation = nil
-                isOpeningWiFiSettings = false
-                didReturnFromWiFiSettings = false
-                continuation.resume()
-            }
+        if awaitingManualWiFi && didLeaveForManualWiFi {
+            resumeManualWiFiImport()
             return
         }
         if !didStartAutomatically {
@@ -128,7 +124,8 @@ final class SpectaclesController: ObservableObject {
 
     func sceneEnteredBackground() {
         isForeground = false
-        if isOpeningWiFiSettings {
+        if awaitingManualWiFi {
+            didLeaveForManualWiFi = true
             return
         }
         liveSyncTask?.cancel()
@@ -194,8 +191,34 @@ final class SpectaclesController: ObservableObject {
         operationTask?.cancel()
         liveSyncTask?.cancel()
         liveSyncTask = nil
+        resumeManualWiFiImport()
         activeMedia?.close()
         activeBLE?.disconnect()
+    }
+
+    func copyManualWiFiSSID() {
+        guard let manualWiFiSSID else { return }
+        UIPasteboard.general.string = manualWiFiSSID
+    }
+
+    func copyManualWiFiPassword() {
+        guard let manualWiFiPassword else { return }
+        UIPasteboard.general.string = manualWiFiPassword
+    }
+
+    func openWiFiSettings() {
+        copyManualWiFiPassword()
+        guard let settingsURL = URL(string: "prefs:root=WIFI") else { return }
+        UIApplication.shared.open(settingsURL, options: [:]) { _ in }
+    }
+
+    func resumeManualWiFiImport() {
+        guard awaitingManualWiFi else { return }
+        awaitingManualWiFi = false
+        didLeaveForManualWiFi = false
+        let continuation = wiFiSettingsContinuation
+        wiFiSettingsContinuation = nil
+        continuation?.resume()
     }
 
     func refreshDeviceInfo() {
@@ -533,11 +556,15 @@ final class SpectaclesController: ObservableObject {
         )
 
         if case .requiresWiFiSettings = joinResult {
-            status = "Select Specs Wi-Fi"
-            detail = "Opening Settings > Wi-Fi. Tap \(credentials.ssid), then return to Malibu."
-            try await openWiFiSettingsAndWait()
+            manualWiFiSSID = credentials.ssid
+            manualWiFiPassword = credentials.password
+            UIPasteboard.general.string = credentials.password
+            status = "Connect to Specs Wi-Fi"
+            detail = "The password is copied. Open Wi-Fi settings below, choose \(credentials.ssid), then return to Malibu."
+            await waitForManualWiFiSelection()
+            try Task.checkCancellation()
             status = "Connecting to Specs Wi-Fi"
-            detail = "Continuing the import automatically."
+            detail = "The network details stay below while Malibu continues the import."
         }
 
         do {
@@ -549,6 +576,8 @@ final class SpectaclesController: ObservableObject {
         }
 
         needsWiFiJoin = false
+        manualWiFiSSID = nil
+        manualWiFiPassword = nil
         isSessionConnected = true
         return media
     }
@@ -592,29 +621,9 @@ final class SpectaclesController: ObservableObject {
         }
     }
 
-    private func openWiFiSettingsAndWait() async throws {
-        guard let settingsURL = URL(string: "App-Prefs:root=WIFI") else {
-            throw MalibuError.networkFailure("could not create the iPhone Wi-Fi settings link")
-        }
-
-        isOpeningWiFiSettings = true
-        didReturnFromWiFiSettings = false
-        let opened = await withCheckedContinuation { continuation in
-            UIApplication.shared.open(settingsURL, options: [:]) { opened in
-                continuation.resume(returning: opened)
-            }
-        }
-        guard opened else {
-            isOpeningWiFiSettings = false
-            throw MalibuError.networkFailure("iOS would not open the Wi-Fi settings page")
-        }
-
-        if didReturnFromWiFiSettings {
-            isOpeningWiFiSettings = false
-            didReturnFromWiFiSettings = false
-            return
-        }
-
+    private func waitForManualWiFiSelection() async {
+        awaitingManualWiFi = true
+        didLeaveForManualWiFi = false
         await withCheckedContinuation { continuation in
             wiFiSettingsContinuation = continuation
         }
@@ -761,7 +770,6 @@ final class SpectaclesController: ObservableObject {
         activeMedia = nil
         activeBLE = nil
         isSessionConnected = false
-        needsWiFiJoin = false
         isRefreshingDeviceInfo = false
         media?.close()
         await ble?.stopAccessPoint()

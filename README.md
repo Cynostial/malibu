@@ -53,11 +53,11 @@ Malibu is not distributed through the App Store.
 5. Enable Developer Mode on the iPhone if iOS requests it.
 6. Trust the installed developer profile under **Settings › General › VPN & Device Management** if required.
 
-A free Apple Account can sign and install the app, but Apple does not include the Hotspot Configuration capability in free Personal Team profiles. When iOS rejects the automatic switch, Malibu opens Settings directly on the Wi-Fi page, keeps the glasses access point and Bluetooth session alive, and continues importing when the user returns. Fully automatic import requires an Apple Developer Program profile containing the Hotspot capability. Apple's current [iOS capability table](https://developer.apple.com/help/account/reference/supported-capabilities-ios) lists Hotspot for paid Developer Program and Enterprise profiles, but not free Apple Developer profiles.
+A free Apple Account can sign and install the app, but Apple does not include the Hotspot Configuration capability in free Personal Team profiles. When iOS rejects the automatic switch, Malibu shows the exact saved network name and password with copy controls. It keeps the glasses access point and Bluetooth session alive while the user changes networks, then continues importing on return. Fully automatic import requires an Apple Developer Program profile containing the Hotspot capability. Apple's current [iOS capability table](https://developer.apple.com/help/account/reference/supported-capabilities-ios) lists Hotspot for paid Developer Program and Enterprise profiles, but not free Apple Developer profiles.
 
 Free Personal Team profiles also expire after seven days. The app must then be signed again using the same account and bundle identifier. This is an [Apple Personal Team limitation](https://developer.apple.com/help/account/basics/about-your-developer-account).
 
-Once Malibu is installed, pairing and importing require only the iPhone and glasses. Free-signed builds need one tap on the saved Specs Wi-Fi network when Malibu opens the Wi-Fi page for a new transfer session.
+Once Malibu is installed, pairing and importing require only the iPhone and glasses. Free-signed builds need one tap on the saved Specs Wi-Fi network for a new transfer session.
 
 ### Build from source
 
@@ -97,7 +97,7 @@ The complete field maps, byte order, command sequence, cryptographic derivation,
 1. Pair the glasses once with Malibu and Apple's accessory card.
 2. Allow Local Network access. Photos access is optional.
 
-After that first setup, unfold the paired glasses, keep them nearby, and open Malibu. The app authenticates and starts the same saved Wi-Fi network. With Apple's Hotspot capability it joins automatically. With free signing, Malibu opens the Wi-Fi page; tap the named Malibu network and return to the app. Malibu keeps the Bluetooth and access-point session alive during that handoff and continues importing on return. It then keeps the session open while Malibu is in the foreground and checks for new recordings every 15 seconds. Recording another clip during that session does not require another Wi-Fi join. The **Check for videos** button remains available for an immediate check or retry.
+After that first setup, unfold the paired glasses, keep them nearby, and open Malibu. The app authenticates and starts the same saved Wi-Fi network. With Apple's Hotspot capability it joins automatically. With free signing, Malibu presents a persistent connection card containing the network name, password, copy controls, and a Wi-Fi settings button. Select the named Malibu network and return to the app. Malibu keeps the Bluetooth and access-point session alive during that handoff and continues importing on return. It then keeps the session open while Malibu is in the foreground and checks for new recordings every 15 seconds. Recording another clip during that session does not require another Wi-Fi join. The **Check for videos** button remains available for an immediate check or retry.
 
 iOS releases temporary accessory Wi-Fi when Malibu moves to the background. When the app becomes active again, Malibu automatically rebuilds the saved Bluetooth, Wi-Fi, and media session. This is an iOS platform rule for `joinAccessoryHotspot`, not a changing Spectacles password.
 
