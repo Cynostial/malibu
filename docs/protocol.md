@@ -449,7 +449,7 @@ On iOS 18 or later, Malibu declares Bluetooth and Wi-Fi support through Accessor
 
 An installation upgrading from an older Malibu version already has the iOS peripheral UUID, pairing key, and deterministic legacy SSID. Malibu creates an `ASMigrationDisplayItem` with the UUID and full SSID before initializing Core Bluetooth. The user approves that association once.
 
-When a foreground session starts, Malibu starts the access point through command 21 and calls `joinAccessoryHotspot` with the authorized accessory and derived passphrase. This avoids a Settings or Control Center handoff and does not require the Hotspot Configuration entitlement.
+When a foreground session starts, Malibu starts the access point through command 21 and calls `joinAccessoryHotspot` with the authorized accessory and derived passphrase. This avoids a Settings or Control Center handoff when the installed app's provisioning profile contains the Hotspot Configuration entitlement. Apple does not provision that capability for free Personal Team signing profiles, and iOS returns `NEHotspotConfigurationError.internal` with code 8 when the entitlement is absent.
 
 `joinAccessoryHotspot` creates a temporary accessory join. iOS does not provide a flag that makes this association permanent. Malibu therefore keeps the BLE, access-point, and media connections active while the app remains in the foreground. It polls the catalogue every 15 seconds and refreshes device status about once a minute. When the app returns from the background, it repeats command 113, command 21, the automatic accessory join, and media nonce setup without asking the user to pair again.
 

@@ -13,7 +13,7 @@ Malibu communicates with the glasses over Bluetooth and their private Wi-Fi netw
 - Creates and stores a fresh pairing identity in the iPhone Keychain
 - Remembers the paired glasses without embedding their serial number in the app
 - Authorizes the glasses once with Apple's accessory setup card
-- Starts a stable private Wi-Fi network and joins it automatically inside Malibu
+- Starts a stable private Wi-Fi network and joins it automatically when the installed app has Apple's Hotspot capability
 - Keeps Bluetooth, Specs Wi-Fi, and the media session connected while Malibu is open
 - Watches for new recordings and imports them without another Wi-Fi join
 - Finds and downloads MP4 recordings
@@ -53,9 +53,11 @@ Malibu is not distributed through the App Store.
 5. Enable Developer Mode on the iPhone if iOS requests it.
 6. Trust the installed developer profile under **Settings › General › VPN & Device Management** if required.
 
-A free Apple Account can sign the app, but its provisioning profile expires after seven days. The app must then be signed again using the same account and bundle identifier. This is an [Apple Personal Team limitation](https://developer.apple.com/help/account/basics/about-your-developer-account).
+A free Apple Account can sign and install the app, but Apple does not include the Hotspot Configuration capability in free Personal Team profiles. Bluetooth pairing works, but iOS rejects the automatic Specs Wi-Fi switch that video import needs. Fully automatic import requires an Apple Developer Program profile containing the Hotspot capability. Apple's current [iOS capability table](https://developer.apple.com/help/account/reference/supported-capabilities-ios) lists Hotspot for paid Developer Program and Enterprise profiles, but not free Apple Developer profiles.
 
-Once Malibu is installed, pairing and importing require only the iPhone and glasses.
+Free Personal Team profiles also expire after seven days. The app must then be signed again using the same account and bundle identifier. This is an [Apple Personal Team limitation](https://developer.apple.com/help/account/basics/about-your-developer-account).
+
+Once Malibu is installed with the required capability, pairing and importing require only the iPhone and glasses.
 
 ### Build from source
 
@@ -95,7 +97,7 @@ The complete field maps, byte order, command sequence, cryptographic derivation,
 1. Pair the glasses once with Malibu and Apple's accessory card.
 2. Allow Local Network access. Photos access is optional.
 
-After that first setup, unfold the paired glasses, keep them nearby, and open Malibu. The app authenticates, starts the same saved Wi-Fi network, joins the approved accessory hotspot, and imports new videos. It keeps that session open while Malibu is in the foreground and checks for new recordings every 15 seconds. Recording another clip does not require another trip through Wi-Fi settings or another join. The **Check for videos** button remains available for an immediate check or retry.
+After that first setup, unfold the paired glasses, keep them nearby, and open Malibu. When the installed signing profile contains Apple's Hotspot capability, the app authenticates, starts the same saved Wi-Fi network, joins the approved accessory hotspot, and imports new videos. It keeps that session open while Malibu is in the foreground and checks for new recordings every 15 seconds. Recording another clip does not require another trip through Wi-Fi settings or another join. The **Check for videos** button remains available for an immediate check or retry.
 
 iOS releases temporary accessory Wi-Fi when Malibu moves to the background. When the app becomes active again, Malibu automatically rebuilds the saved Bluetooth, Wi-Fi, and media session. This is an iOS platform rule for `joinAccessoryHotspot`, not a changing Spectacles password.
 
@@ -116,6 +118,7 @@ Open the information button in the navigation bar to see live device details. Ma
 - Photo import and storage management are not implemented.
 - iOS requires one explicit accessory approval during setup or migration.
 - Background importing is not supported because iOS releases the temporary accessory hotspot after the app leaves the foreground.
+- Automatic Wi-Fi joining is unavailable when Malibu is signed with a free Personal Team profile because Apple does not provision the Hotspot capability for free accounts.
 - Malibu stores one pairing identity at a time.
 - Deleting a Malibu copy does not delete copies in Photos or recordings on the glasses.
 - Builds signed with a free Apple Account expire after seven days.
@@ -131,7 +134,7 @@ During fresh pairing, Malibu performs an X25519 key exchange, completes the Spec
 
 During setup, Malibu uses `AccessorySetupKit` to authorize the glasses as one Bluetooth and Wi-Fi accessory. During a session, Malibu authenticates over Bluetooth, reads device status through the recovered protobuf commands, asks the glasses to create a WPA2 access point with credentials derived from the saved pairing, and uses `joinAccessoryHotspot` to join that approved accessory automatically. It then connects to the media service at `192.168.42.1:1234`, downloads each clip's dedicated thumbnail file, and transfers the MP4. Malibu keeps the session active with catalogue and battery requests while it remains in the foreground. If the media connection drops, Malibu creates a fresh encrypted session and resumes the partial video.
 
-Before each connection, Malibu resolves the current Core Bluetooth identifier from the authorized `ASAccessory`. iOS can issue a different app-scoped identifier after the app is re-signed or reinstalled, so Malibu reconciles that identifier with the saved pairing instead of treating the radio as unavailable. The target also declares Apple's Hotspot Configuration capability required by `NEHotspotConfigurationManager` for the automatic Wi-Fi join.
+Before each connection, Malibu resolves the current Core Bluetooth identifier from the authorized `ASAccessory`. iOS can issue a different app-scoped identifier after the app is re-signed or reinstalled, so Malibu reconciles that identifier with the saved pairing instead of treating the radio as unavailable. The target also declares Apple's Hotspot Configuration capability required by `NEHotspotConfigurationManager` for the automatic Wi-Fi join. The app's provisioning profile must contain the same entitlement, which free Personal Team profiles do not.
 
 See [`docs/protocol.md`](docs/protocol.md) for the full reverse-engineered wire specification.
 

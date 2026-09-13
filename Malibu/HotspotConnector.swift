@@ -20,6 +20,14 @@ final class HotspotConnector {
         } catch {
             let failure = error as NSError
             if failure.domain == NEHotspotConfigurationErrorDomain {
+                if failure.code == 13 {
+                    return
+                }
+                if failure.code == 8 {
+                    throw MalibuError.networkFailure(
+                        "automatic Specs Wi-Fi needs Apple's Hotspot Configuration capability, but the installed signing profile does not provide it"
+                    )
+                }
                 throw MalibuError.networkFailure(
                     "iOS could not join the approved Specs Wi-Fi (Hotspot Configuration error \(failure.code))"
                 )
