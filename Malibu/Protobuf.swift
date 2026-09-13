@@ -91,6 +91,11 @@ enum Protobuf {
         return nil
     }
 
+    static func firstInt32(_ data: Data, field: Int) throws -> Int? {
+        guard let value = try firstInt(data, field: field) else { return nil }
+        return Int(Int32(bitPattern: UInt32(truncatingIfNeeded: value)))
+    }
+
     private static func readVarint(_ data: Data, position: inout Int) throws -> UInt64 {
         var value: UInt64 = 0
         var shift: UInt64 = 0

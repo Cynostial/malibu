@@ -43,6 +43,16 @@ struct ContentView: View {
             }
             .navigationTitle("Malibu")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NavigationLink {
+                        DeviceInfoView()
+                    } label: {
+                        Image(systemName: "info.circle")
+                    }
+                    .accessibilityLabel("Spectacles information")
+                }
+            }
             .task {
                 controller.startAutomaticImportIfReady()
             }
@@ -371,6 +381,196 @@ struct ContentView: View {
     private func fileSize(_ url: URL) -> String {
         guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return "MP4" }
         return ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
+    }
+}
+
+private struct DeviceInfoView: View {
+    @EnvironmentObject private var controller: SpectaclesController
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(red: 0.03, green: 0.04, blue: 0.08), Color(red: 0.03, green: 0.11, blue: 0.16)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 18) {
+                    batteryCard
+                    deviceCard
+                    connectionCard
+                }
+                .padding(20)
+            }
+        }
+        .navigationTitle("Spectacles info")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    controller.refreshDeviceInfo()
+                } label: {
+                    if controller.isRefreshingDeviceInfo {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .disabled(controller.isWorking || controller.isRefreshingDeviceInfo)
+                .accessibilityLabel("Refresh Spectacles information")
+            }
+        }
+    }
+
+    private var batteryCard: some View {
+        HStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.10), lineWidth: 9)
+                Circle()
+                    .trim(from: 0, to: batteryProgress)
+                    .stroke(
+                        batteryColor,
+                        style: StrokeStyle(lineWidth: 9, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                VStack(spacing: 1) {
+                    Text(batteryText)
+                        .font(.title2.monospacedDigit().bold())
+                    Text("battery")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 112, height: 112)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(controller.isSessionConnected ? "Connected" : "Not connected")
+                    .font(.title3.bold())
+                Label(chargingText, systemImage: chargingSymbol)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                if let updated = controller.deviceInfo.lastUpdated {
+                    Text("Updated \(updated.formatted(.relative(presentation: .named)))")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(18)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    private var deviceCard: some View {
+        VStack(spacing: 0) {
+            infoRow("Model", value: "Spectacles 2")
+            divider
+            infoRow("Frame", value: controller.deviceInfo.frameName ?? "Unavailable")
+            divider
+            infoRow("Firmware", value: controller.deviceInfo.firmwareVersion ?? "Unavailable")
+            divider
+            infoRow("Serial number", value: controller.deviceInfo.serialNumber ?? "Unavailable", monospaced: true)
+            divider
+            infoRow("Storage", value: storageText)
+            divider
+            infoRow("Temperature", value: temperatureText)
+        }
+        .padding(.horizontal, 16)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    private var connectionCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(
+                controller.isSessionConnected ? "Live import is active" : "Open the glasses to connect",
+                systemImage: controller.isSessionConnected ? "bolt.horizontal.circle.fill" : "circle.dotted"
+            )
+            .font(.headline)
+            .foregroundStyle(controller.isSessionConnected ? Color.green : Color.cyan)
+
+            Text(
+                controller.isSessionConnected
+                    ? "Malibu keeps Bluetooth, Specs Wi-Fi, and the media session open while the app is in the foreground. New recordings are detected and imported automatically."
+                    : "Malibu reads device information during the next connection. Tap below to connect and refresh it now."
+            )
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+
+            if !controller.isSessionConnected {
+                Button {
+                    controller.refreshDeviceInfo()
+                } label: {
+                    Label("Connect and refresh", systemImage: "arrow.clockwise")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.cyan)
+                .foregroundStyle(.black)
+                .disabled(controller.isWorking || !controller.isPaired)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func infoRow(_ label: String, value: String, monospaced: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(monospaced ? .subheadline.monospaced() : .subheadline)
+                .multilineTextAlignment(.trailing)
+                .textSelection(.enabled)
+        }
+        .padding(.vertical, 14)
+    }
+
+    private var divider: some View {
+        Divider().overlay(Color.white.opacity(0.08))
+    }
+
+    private var batteryProgress: Double {
+        Double(controller.deviceInfo.batteryPercent ?? 0) / 100
+    }
+
+    private var batteryText: String {
+        guard let battery = controller.deviceInfo.batteryPercent else { return "--" }
+        return "\(battery)%"
+    }
+
+    private var batteryColor: Color {
+        guard let battery = controller.deviceInfo.batteryPercent else { return .secondary }
+        if battery < 10 { return .red }
+        if battery < 25 { return .orange }
+        return .green
+    }
+
+    private var chargingText: String {
+        guard let isCharging = controller.deviceInfo.isCharging else {
+            return "Charge state unavailable"
+        }
+        return isCharging ? "Charging" : "On battery"
+    }
+
+    private var chargingSymbol: String {
+        controller.deviceInfo.isCharging == true ? "bolt.fill" : "battery.100"
+    }
+
+    private var storageText: String {
+        guard let used = controller.deviceInfo.storageUsedPercent else { return "Unavailable" }
+        return "\(used)% used"
+    }
+
+    private var temperatureText: String {
+        guard let temperature = controller.deviceInfo.batteryTemperatureCelsius else { return "Unavailable" }
+        return "\(temperature) °C"
     }
 }
 

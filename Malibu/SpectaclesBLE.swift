@@ -30,6 +30,25 @@ private final class MalibuFrameReader {
     }
 }
 
+struct SpectaclesDeviceInfo: Equatable {
+    var serialNumber: String?
+    var firmwareVersion: String?
+    var batteryPercent: Int?
+    var batteryTemperatureCelsius: Int?
+    var isCharging: Bool?
+    var storageUsedPercent: Int?
+    var frameName: String?
+    var lastUpdated: Date?
+
+    var hasDeviceData: Bool {
+        serialNumber != nil
+            || firmwareVersion != nil
+            || batteryPercent != nil
+            || storageUsedPercent != nil
+            || frameName != nil
+    }
+}
+
 @MainActor
 final class SpectaclesBLE: NSObject, @preconcurrency CBCentralManagerDelegate, @preconcurrency CBPeripheralDelegate {
     private enum ScanMode {
@@ -56,6 +75,7 @@ final class SpectaclesBLE: NSObject, @preconcurrency CBCentralManagerDelegate, @
     private var pendingRequest: (token: UUID, command: UInt16, continuation: CheckedContinuation<Data, Error>)?
 
     var connectedIdentifier: UUID? { peripheral?.identifier }
+    var isConnected: Bool { peripheral?.state == .connected }
 
     func connect(forPairing: Bool = false, knownIdentifier: UUID? = nil) async throws {
         try await waitForBluetooth()
@@ -155,6 +175,62 @@ final class SpectaclesBLE: NSObject, @preconcurrency CBCentralManagerDelegate, @
         _ = try await request(command: 21, payload: payload)
     }
 
+    func readDeviceInfo(existing: SpectaclesDeviceInfo = SpectaclesDeviceInfo()) async -> SpectaclesDeviceInfo {
+        var info = existing
+        var receivedResponse = false
+
+        do {
+            // The retired Spectacles 2 client issues the same sequence after
+            // every authenticated BLE connection.
+            let battery = try await request(
+                command: 42,
+                payload: Protobuf.int(1, 1),
+                timeout: 6
+            )
+            if let rawBattery = try Protobuf.firstInt(battery, field: 1) {
+                let displayed = min(Float(100), Float(rawBattery) / Float(0.95))
+                info.batteryPercent = max(0, Int(displayed))
+            }
+            info.batteryTemperatureCelsius = try Protobuf.firstInt32(battery, field: 3)
+            receivedResponse = true
+
+            let charger = try await request(command: 106, timeout: 6)
+            if let chargerConnected = try Protobuf.firstInt(charger, field: 1) {
+                info.isCharging = chargerConnected != 0
+            }
+
+            let serial = try await request(command: 16, timeout: 6)
+            if let serialBytes = try Protobuf.firstBytes(serial, field: 1), serialBytes.count == 8 {
+                info.serialNumber = serialBytes.map { String(format: "%02X", $0) }.joined()
+            }
+
+            let firmware = try await request(command: 0, timeout: 6)
+            if let firmwareBytes = try Protobuf.firstBytes(firmware, field: 3),
+               let version = String(data: firmwareBytes, encoding: .utf8),
+               !version.isEmpty {
+                info.firmwareVersion = version
+            }
+
+            let color = try await request(command: 37, timeout: 6)
+            if let colorID = try Protobuf.firstInt(color, field: 1) {
+                info.frameName = Self.frameName(for: colorID)
+            }
+
+            let storage = try await request(command: 150, timeout: 6)
+            if let usedPercent = try Protobuf.firstInt(storage, field: 1) {
+                info.storageUsedPercent = Int(min(UInt64(100), usedPercent))
+            }
+        } catch {
+            // Device information is supplemental. A firmware variant that
+            // omits one request must not prevent video import.
+        }
+
+        if receivedResponse {
+            info.lastUpdated = Date()
+        }
+        return info
+    }
+
     func stopAccessPoint() async {
         guard peripheral?.state == .connected else { return }
         _ = try? await request(command: 22, timeout: 5)
@@ -186,6 +262,17 @@ final class SpectaclesBLE: NSObject, @preconcurrency CBCentralManagerDelegate, @
         notifyCharacteristic = nil
         secure = false
         crypto = nil
+    }
+
+    private static func frameName(for colorID: UInt64) -> String? {
+        switch colorID {
+        case 0: return "Onyx"
+        case 1: return "Ruby"
+        case 2: return "Sapphire"
+        case 3: return "Veronica"
+        case 4: return "Nico"
+        default: return nil
+        }
     }
 
     func request(

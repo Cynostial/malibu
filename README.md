@@ -14,12 +14,15 @@ Malibu communicates with the glasses over Bluetooth and their private Wi-Fi netw
 - Remembers the paired glasses without embedding their serial number in the app
 - Authorizes the glasses once with Apple's accessory setup card
 - Starts a stable private Wi-Fi network and joins it automatically inside Malibu
+- Keeps Bluetooth, Specs Wi-Fi, and the media session connected while Malibu is open
+- Watches for new recordings and imports them without another Wi-Fi join
 - Finds and downloads MP4 recordings
 - Starts importing automatically whenever Malibu opens
 - Resumes interrupted video downloads and retries dropped connections
 - Fetches each clip's camera thumbnail before its MP4 and uses it in a circular progress portal
 - Saves videos inside Malibu, in Files, and optionally in Photos
 - Renames, sorts, shares, and deletes local video copies
+- Shows battery level, charge state, frame color, firmware, serial number, temperature, and storage use
 - Works without Snapchat during pairing and importing
 - Uses no accounts, analytics, advertising, or remote services
 - Leaves the original recordings on the glasses
@@ -92,7 +95,9 @@ The complete field maps, byte order, command sequence, cryptographic derivation,
 1. Pair the glasses once with Malibu and Apple's accessory card.
 2. Allow Local Network access. Photos access is optional.
 
-After that first setup, unfold the paired glasses, keep them nearby, and open Malibu. The app authenticates, starts the same saved Wi-Fi network, joins the approved accessory hotspot, and imports new videos. The **Check for videos** button remains available for retries. Malibu does not send you to Settings or Control Center for each import.
+After that first setup, unfold the paired glasses, keep them nearby, and open Malibu. The app authenticates, starts the same saved Wi-Fi network, joins the approved accessory hotspot, and imports new videos. It keeps that session open while Malibu is in the foreground and checks for new recordings every 15 seconds. Recording another clip does not require another trip through Wi-Fi settings or another join. The **Check for videos** button remains available for an immediate check or retry.
+
+iOS releases temporary accessory Wi-Fi when Malibu moves to the background. When the app becomes active again, Malibu automatically rebuilds the saved Bluetooth, Wi-Fi, and media session. This is an iOS platform rule for `joinAccessoryHotspot`, not a changing Spectacles password.
 
 If you paired with an older Malibu build, the first launch of this version shows Apple's accessory migration card once. Approve it to give Malibu access to the already-paired glasses. Later imports join automatically.
 
@@ -102,13 +107,15 @@ Imported MP4 files appear in Malibu's library and under **Files › On My iPhone
 
 Tap a video to play it. Use the options button beside a video to rename, share, save, or delete the local Malibu copy. The library options menu can sort the list, refresh it, or delete all local copies. Renaming a local copy does not cause Malibu to import the same clip again under its original name.
 
+Open the information button in the navigation bar to see live device details. Malibu reads these values over the authenticated BLE connection and never writes them to logs or sends them elsewhere.
+
 ## Known limitations
 
 - Hardware compatibility has only been verified with one Spectacles 2 unit.
 - Only MP4 video import is implemented.
 - Photo import and storage management are not implemented.
 - iOS requires one explicit accessory approval during setup or migration.
-- Background importing is not supported.
+- Background importing is not supported because iOS releases the temporary accessory hotspot after the app leaves the foreground.
 - Malibu stores one pairing identity at a time.
 - Deleting a Malibu copy does not delete copies in Photos or recordings on the glasses.
 - Builds signed with a free Apple Account expire after seven days.
@@ -122,7 +129,7 @@ Malibu uses two connections:
 
 During fresh pairing, Malibu performs an X25519 key exchange, completes the Spectacles proof exchange, confirms the derived session key with an encrypted response, and associates a locally generated identity with the glasses. The resulting packet key and the iOS Bluetooth identifier are stored in the iPhone Keychain.
 
-During setup, Malibu uses `AccessorySetupKit` to authorize the glasses as one Bluetooth and Wi-Fi accessory. During an import, Malibu authenticates over Bluetooth, asks the glasses to create a WPA2 access point with credentials derived from the saved pairing, and uses `joinAccessoryHotspot` to join that approved accessory automatically. It then connects to the media service at `192.168.42.1:1234`, downloads the clip's dedicated thumbnail file, and transfers the MP4. Media commands and downloaded blocks remain on the local network. If the connection drops, Malibu creates a fresh encrypted media session and resumes the partial video.
+During setup, Malibu uses `AccessorySetupKit` to authorize the glasses as one Bluetooth and Wi-Fi accessory. During a session, Malibu authenticates over Bluetooth, reads device status through the recovered protobuf commands, asks the glasses to create a WPA2 access point with credentials derived from the saved pairing, and uses `joinAccessoryHotspot` to join that approved accessory automatically. It then connects to the media service at `192.168.42.1:1234`, downloads each clip's dedicated thumbnail file, and transfers the MP4. Malibu keeps the session active with catalogue and battery requests while it remains in the foreground. If the media connection drops, Malibu creates a fresh encrypted session and resumes the partial video.
 
 See [`docs/protocol.md`](docs/protocol.md) for the full reverse-engineered wire specification.
 

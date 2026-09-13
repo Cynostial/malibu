@@ -5,6 +5,7 @@ import SwiftUI
 
 @main
 struct MalibuApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var controller = SpectaclesController()
 
     var body: some Scene {
@@ -12,6 +13,18 @@ struct MalibuApp: App {
             ContentView()
                 .environmentObject(controller)
                 .preferredColorScheme(.dark)
+                .onChange(of: scenePhase) { _, phase in
+                    switch phase {
+                    case .active:
+                        controller.sceneBecameActive()
+                    case .background:
+                        controller.sceneEnteredBackground()
+                    case .inactive:
+                        break
+                    @unknown default:
+                        break
+                    }
+                }
         }
     }
 }

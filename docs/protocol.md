@@ -31,17 +31,21 @@ sequenceDiagram
     BLE-->>App: Association accepted
     Note over App,BLE: Pairing key is retained in the iPhone Keychain
     App->>BLE: Command 113, authenticate a later session
+    App->>BLE: Encrypted device-information requests
     App->>BLE: Encrypted command 21, SSID and passphrase
     BLE->>AP: Start temporary access point
     App->>AP: Join authorized accessory hotspot
     App->>Media: TCP 192.168.42.1:1234
     App->>Media: Type 2 nonce exchange
-    App->>Media: Encrypted catalogue request
-    Media-->>App: Clip IDs, file types, and sizes
-    loop Each new clip
-        App->>Media: Thumbnail range requests
-        App->>Media: MP4 range requests
+    loop While Malibu remains in the foreground
+        App->>Media: Encrypted catalogue request
+        Media-->>App: Clip IDs, file types, and sizes
+        opt Each new clip
+            App->>Media: Thumbnail range requests
+            App->>Media: MP4 range requests
+        end
     end
+    Note over App,Media: iOS releases temporary accessory Wi-Fi in the background
     App->>BLE: Encrypted command 22
     BLE->>AP: Stop access point
 ```
@@ -283,9 +287,11 @@ client receive nonce  = Ts
 
 Subsequent commands use encrypted kind `5` until the BLE connection ends.
 
-### Command 16: encrypted key confirmation
+### Command 16: serial number and encrypted key confirmation
 
-Command 16 has no protobuf payload. Malibu sends it as the first encrypted request after command 113. A valid encrypted response demonstrates that the glasses accepted `K` and the negotiated nonce state.
+Command 16 has no protobuf payload. It returns the device serial number as bytes in response field `1`. The legacy client converts those bytes to uppercase hexadecimal and accepts exactly 16 hexadecimal characters on Spectacles 2.
+
+Malibu also sends command 16 as the first encrypted request after command 113 during pairing. Successfully decrypting its response demonstrates that the glasses accepted `K` and the negotiated nonce state. The pairing path does not need to retain the serial number.
 
 ### Command 115: associate the client identity
 
@@ -298,6 +304,69 @@ Request payload:
 Malibu's identifier is 32 lowercase hexadecimal characters generated from 16 random bytes. The response must contain varint field `1` equal to `1`.
 
 The identifier is local to the installation. It is not a Snapchat username or account identifier.
+
+## Device information commands
+
+The retired Spectacles 2 client requests battery, charger, serial, firmware, frame color, and storage data after BLE authentication. Static inspection maps each request to a 16-bit command number and maps the protobuf response type. Malibu reproduces that sequence after command 113. These fields are **derived** from the client and should be tested across more firmware versions.
+
+All requests in this section use encrypted frame kind `5` and a zero reserved byte.
+
+### Command 42: battery status
+
+Request protobuf:
+
+| Field | Type | Malibu value | Meaning |
+| ---: | --- | ---: | --- |
+| `1` | varint | `1` | Main battery selector |
+
+Response protobuf:
+
+| Field | Type | Meaning |
+| ---: | --- | --- |
+| `1` | varint | Raw battery percentage |
+| `2` | varint | Unknown |
+| `3` | signed int32 varint | Battery temperature in degrees Celsius |
+| `4` | varint | Unknown |
+| `5` | enum varint | Unknown battery state |
+| `6` | enum varint | Unknown battery condition |
+
+The legacy client presents the battery value as:
+
+```text
+displayed_percent = clamp(floor(raw_percent / 0.95), 0, 100)
+```
+
+Malibu uses the same conversion so its value matches the original client.
+
+### Command 106: charger state
+
+Command 106 has no payload. Response field `1` is a boolean and is true while a charger is connected. Response fields `2` through `6` exist in the recovered schema, but their meanings have not been assigned because the evidence is incomplete.
+
+### Command 0: firmware version
+
+Command 0 has no payload. Its response contains strings in fields `1`, `2`, and `3`, plus optional strings in fields `4` and `5` and an optional unsigned integer in field `6`. The Spectacles 2 client uses field `3` as the firmware version shown for Malibu and Neptune hardware.
+
+### Command 37: frame color
+
+Command 37 has no payload. Response field `1` is an enum:
+
+| Value | Frame |
+| ---: | --- |
+| `0` | Onyx |
+| `1` | Ruby |
+| `2` | Sapphire |
+| `3` | Veronica |
+| `4` | Nico |
+
+Response field `2` is an optional unsigned integer with an unknown meaning.
+
+### Command 150: storage percentage
+
+Command 150 has no payload. Response field `1` is an unsigned integer used by the legacy client as device storage percentage. Malibu presents it as storage used and clamps the displayed value to the range from 0 through 100.
+
+### Optional and unused status requests
+
+The recovered client also contains command 195, named `GetGuppyBatteryStatus`, and command 163, named `GetAvailableStorage`. Malibu does not expose either one yet because the Guppy subsystem label and the byte-count semantics of the available-storage response have not been confirmed on the test hardware.
 
 ## AES-GCM packet format
 
@@ -339,7 +408,7 @@ The glasses return a normal command response. A zero status means the radio acce
 
 ### Command 22: stop the access point
 
-Command 22 has no protobuf payload. Malibu sends it during normal cleanup while BLE is still connected. The glasses also stop the access point themselves after inactivity or when power state changes.
+Command 22 has no protobuf payload. Malibu sends it when the app enters the background, the user cancels, or a connection fails. During normal foreground use Malibu leaves the access point running and sends periodic media and battery requests. The glasses can still stop the access point after inactivity or when their power state changes.
 
 ### Malibu network credentials
 
@@ -378,7 +447,9 @@ On iOS 18 or later, Malibu declares Bluetooth and Wi-Fi support through Accessor
 
 An installation upgrading from an older Malibu version already has the iOS peripheral UUID, pairing key, and deterministic legacy SSID. Malibu creates an `ASMigrationDisplayItem` with the UUID and full SSID before initializing Core Bluetooth. The user approves that association once.
 
-For each import, Malibu starts the access point through command 21 and calls `joinAccessoryHotspot` with the authorized accessory and derived passphrase. This avoids a Settings or Control Center handoff and does not require the Hotspot Configuration entitlement.
+When a foreground session starts, Malibu starts the access point through command 21 and calls `joinAccessoryHotspot` with the authorized accessory and derived passphrase. This avoids a Settings or Control Center handoff and does not require the Hotspot Configuration entitlement.
+
+`joinAccessoryHotspot` creates a temporary accessory join. iOS does not provide a flag that makes this association permanent. Malibu therefore keeps the BLE, access-point, and media connections active while the app remains in the foreground. It polls the catalogue every 15 seconds and refreshes device status about once a minute. When the app returns from the background, it repeats command 113, command 21, the automatic accessory join, and media nonce setup without asking the user to pair again.
 
 ## Media transport
 
@@ -556,7 +627,7 @@ For each returned block Malibu verifies:
 
 After the last block, the file is synchronized and its exact size is checked before it is renamed to `.mp4`.
 
-If a range request times out or the socket closes, Malibu cancels the TCP connection, creates a new media session with fresh nonces, and retries the same offset once. A later app run can resume the same partial file.
+If a range request times out or the socket closes, Malibu cancels the TCP connection, creates a new media session with fresh nonces, and retries the same offset once. If the complete foreground session has dropped, Malibu closes both transports, reconnects over BLE, starts Specs Wi-Fi again, rejoins it automatically, and resumes the partial file.
 
 Malibu never sends a storage deletion command. Importing or deleting an iPhone copy does not remove the recording from the glasses.
 
@@ -581,10 +652,12 @@ A compatible client needs to:
 4. Complete commands 80 and 116 and derive the 16-byte packet key.
 5. Negotiate command 113 nonces and maintain independent big-endian AES-GCM counters.
 6. Confirm encryption with command 16 and associate an identity with command 115.
-7. Start the access point with command 21.
-8. Join the resulting Wi-Fi network and open TCP `192.168.42.1:1234`.
-9. Complete the type 2 media nonce exchange.
-10. Request the catalogue, select file types 1 and 4, and download bounded ranges.
-11. Stop the access point with command 22 when finished.
+7. Read device information with the documented encrypted commands.
+8. Start the access point with command 21.
+9. Join the resulting Wi-Fi network and open TCP `192.168.42.1:1234`.
+10. Complete the type 2 media nonce exchange.
+11. Request the catalogue, select file types 1 and 4, and download bounded ranges.
+12. Keep the foreground session active if continuous import is desired.
+13. Stop the access point with command 22 when the session ends.
 
 Never log or publish a real pairing key, full device identifier, access-point passphrase, or private media sample.

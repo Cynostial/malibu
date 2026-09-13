@@ -33,6 +33,18 @@ final class SpectaclesController: ObservableObject {
         var renamedFiles: [String: String] = [:]
     }
 
+    private struct PendingClip {
+        let clip: SpectaclesClip
+        let filename: String
+        let destination: URL
+    }
+
+    private struct SyncResult {
+        let catalogueCount: Int
+        let importedCount: Int
+        let savedToPhotos: Int
+    }
+
     @Published var status = ""
     @Published var detail = ""
     @Published var isPaired = false
@@ -47,11 +59,18 @@ final class SpectaclesController: ObservableObject {
     @Published var totalClips = 0
     @Published var clipProgress: Double = 0
     @Published var currentImportThumbnail: UIImage?
+    @Published var isSessionConnected = false
+    @Published var isRefreshingDeviceInfo = false
+    @Published var deviceInfo = SpectaclesDeviceInfo()
+    @Published var lastSyncDate: Date?
 
     private var operationTask: Task<Void, Never>?
+    private var liveSyncTask: Task<Void, Never>?
     private var activeBLE: SpectaclesBLE?
     private var activeMedia: AMBAClient?
     private var didStartAutomatically = false
+    private var isForeground = true
+    private var isSyncInFlight = false
 
     init() {
         ProtocolSelfTest.run()
@@ -73,8 +92,42 @@ final class SpectaclesController: ObservableObject {
         importVideos()
     }
 
+    func sceneBecameActive() {
+        isForeground = true
+        if !didStartAutomatically {
+            startAutomaticImportIfReady()
+        } else if isSessionConnected {
+            scheduleLiveSync()
+        } else if isPaired {
+            Task { [weak self] in
+                guard let self else { return }
+                for _ in 0..<50 {
+                    if !self.isWorking && !self.isSyncInFlight {
+                        self.importVideos()
+                        return
+                    }
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                    guard self.isForeground else { return }
+                }
+            }
+        }
+    }
+
+    func sceneEnteredBackground() {
+        isForeground = false
+        liveSyncTask?.cancel()
+        liveSyncTask = nil
+        operationTask?.cancel()
+        Task { [weak self] in
+            guard let self else { return }
+            await self.endSession()
+        }
+    }
+
     func pairSpectacles() {
         guard !isWorking else { return }
+        liveSyncTask?.cancel()
+        liveSyncTask = nil
         isWorking = true
         isPairing = true
         importPhase = .pairing
@@ -82,15 +135,23 @@ final class SpectaclesController: ObservableObject {
         progress = 0
         operationTask = Task { [weak self] in
             guard let self else { return }
+            await self.endSession()
             let paired = await self.runPairing()
-            guard paired, !Task.isCancelled else { return }
+            guard paired, !Task.isCancelled else {
+                self.isWorking = false
+                self.isPairing = false
+                self.operationTask = nil
+                return
+            }
             self.resetImportProgress()
             await self.runPreparedImport()
         }
     }
 
     func importVideos() {
-        guard !isWorking else { return }
+        guard !isWorking, !isSyncInFlight else { return }
+        liveSyncTask?.cancel()
+        liveSyncTask = nil
         isWorking = true
         lastError = nil
         progress = 0
@@ -115,8 +176,31 @@ final class SpectaclesController: ObservableObject {
 
     func cancelOperation() {
         operationTask?.cancel()
+        liveSyncTask?.cancel()
+        liveSyncTask = nil
         activeMedia?.close()
         activeBLE?.disconnect()
+    }
+
+    func refreshDeviceInfo() {
+        guard isPaired, !isWorking, !isSyncInFlight, !isRefreshingDeviceInfo else { return }
+        guard let ble = activeBLE, ble.isConnected, isSessionConnected else {
+            importVideos()
+            return
+        }
+
+        liveSyncTask?.cancel()
+        liveSyncTask = nil
+        isSyncInFlight = true
+        isRefreshingDeviceInfo = true
+        operationTask = Task { [weak self] in
+            guard let self else { return }
+            self.deviceInfo = await ble.readDeviceInfo(existing: self.deviceInfo)
+            self.isRefreshingDeviceInfo = false
+            self.isSyncInFlight = false
+            self.operationTask = nil
+            self.scheduleLiveSync()
+        }
     }
 
     private func runPairing() async -> Bool {
@@ -342,143 +426,236 @@ final class SpectaclesController: ObservableObject {
     }
 
     private func runImport(_ credentials: ImportCredentials) async {
-        let encryptionKey = credentials.encryptionKey
-        let peripheralIdentifier = credentials.peripheralIdentifier
-        let ble = SpectaclesBLE()
-        let media = AMBAClient(encryptionKey: encryptionKey)
-        activeBLE = ble
-        activeMedia = media
-
         do {
-            importPhase = .locating
-            status = "Looking for your Spectacles…"
-            detail = "Keep them close to the iPhone."
-            try await ble.connect(knownIdentifier: peripheralIdentifier)
-
-            importPhase = .authenticating
-            status = "Authenticating…"
-            detail = "Using the pairing key stored securely on this iPhone."
-            try await ble.enableSecurity(key: encryptionKey)
-
-            let ssid = credentials.ssid
-            let password = credentials.password
-            status = "Starting Specs Wi-Fi"
-            detail = "The saved network name and password are reused for this pairing."
-            try await ble.startAccessPoint(ssid: ssid, password: password)
-
-            needsWiFiJoin = true
-            importPhase = .switchingWiFi
-            status = "Joining Specs Wi-Fi"
-            detail = "iOS is joining the accessory network approved during setup."
-
-            try await HotspotConnector().join(
-                ssid: ssid,
-                password: password,
-                peripheralIdentifier: peripheralIdentifier
-            )
-
-            do {
-                try await media.connectAndSetupWithRetry(maxAttempts: 4)
-            } catch {
-                status = "Waiting for Specs Wi-Fi"
-                detail = "The network is approved. iOS is finishing the connection."
-                try await media.connectAndSetupWithRetry(maxAttempts: 4)
-            }
-            needsWiFiJoin = false
-
-            importPhase = .reading
-            status = "Reading the clip list…"
-            detail = "The Bluetooth connection stays open during transfer."
-            let clips = try await media.listClipsWithRetry().filter { $0.video != nil }
-            totalClips = clips.count
-            guard !clips.isEmpty else {
-                importPhase = .complete
-                status = "No clips found"
-                detail = "Record a clip with one button press and try again."
-                await cleanUp()
-                isWorking = false
-                activeBLE = nil
-                activeMedia = nil
-                operationTask = nil
-                return
-            }
-
-            let directory = try videoDirectory()
-            let manifest = loadVideoLibraryManifest(in: directory)
-            var newlyImported: [URL] = []
-            for (index, clip) in clips.enumerated() {
-                guard let video = clip.video else { continue }
-                let sourceFilename = sanitizeFilename(
-                    clip.contentID,
-                    fallback: String(format: "spectacles_%04d", index + 1)
-                ) + ".mp4"
-                let filename = manifest.renamedFiles[sourceFilename] ?? sourceFilename
-                let destination = directory.appendingPathComponent(filename)
-                let existingSize = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? -1
-                if existingSize == video.size {
-                    currentClip = index + 1
-                    clipProgress = 1
-                    progress = Double(index + 1) / Double(clips.count)
-                    continue
-                }
-
-                importPhase = .downloading
-                currentClip = index + 1
-                clipProgress = 0
-                currentImportThumbnail = nil
-                status = "Importing \(index + 1) of \(clips.count)"
-                detail = "Preparing \(filename)"
-                if let thumbnailData = await media.thumbnailData(for: clip),
-                   let thumbnail = UIImage(data: thumbnailData) {
-                    currentImportThumbnail = thumbnail
-                }
-                detail = filename
-                try await media.download(clip: clip, to: destination) { [weak self] clipProgress in
-                    Task { @MainActor in
-                        self?.clipProgress = clipProgress
-                        self?.progress = (Double(index) + clipProgress) / Double(clips.count)
-                    }
-                }
-                currentImportThumbnail = await videoThumbnail(for: destination) ?? currentImportThumbnail
-                newlyImported.append(destination)
-            }
-
-            importPhase = .saving
-            status = "Saving to Photos…"
-            detail = newlyImported.isEmpty ? "Every clip was already imported." : "Allow add-only Photos access if iOS asks."
-            let savedToPhotos = try await PhotosSaver.add(videos: newlyImported)
-            refreshLibrary()
-            progress = 1
-            importPhase = .complete
-            status = newlyImported.isEmpty ? "Everything is up to date" : "Import complete"
-            detail = newlyImported.isEmpty
-                ? "No new videos were copied."
-                : "\(newlyImported.count) new video\(newlyImported.count == 1 ? "" : "s") imported; \(savedToPhotos) added to Photos."
-            await cleanUp()
+            let media = try await establishSession(credentials)
+            let result = try await syncClips(using: media, passive: false)
+            finishSuccessfulSync(result)
+            isWorking = false
+            isSyncInFlight = false
+            operationTask = nil
+            scheduleLiveSync()
         } catch is CancellationError {
             importPhase = .idle
             status = "Import cancelled"
             detail = "Unfold the glasses and try again when you are ready."
-            await cleanUp()
+            await endSession()
+            isWorking = false
+            isSyncInFlight = false
+            operationTask = nil
         } catch {
             importPhase = .failed
             lastError = error.localizedDescription
             status = "Import stopped"
             detail = error.localizedDescription
-            await cleanUp()
+            await endSession()
+            isWorking = false
+            isSyncInFlight = false
+            operationTask = nil
         }
-
-        isWorking = false
-        activeBLE = nil
-        activeMedia = nil
-        operationTask = nil
     }
 
-    private func cleanUp() async {
-        activeMedia?.close()
-        await activeBLE?.stopAccessPoint()
-        activeBLE?.disconnect()
+    private func establishSession(_ credentials: ImportCredentials) async throws -> AMBAClient {
+        if isSessionConnected,
+           let ble = activeBLE,
+           ble.isConnected,
+           let media = activeMedia {
+            return media
+        }
+
+        await endSession()
+        let ble = SpectaclesBLE()
+        let media = AMBAClient(encryptionKey: credentials.encryptionKey)
+        activeBLE = ble
+        activeMedia = media
+
+        importPhase = .locating
+        status = "Looking for your Spectacles…"
+        detail = "Keep them close to the iPhone."
+        try await ble.connect(knownIdentifier: credentials.peripheralIdentifier)
+
+        importPhase = .authenticating
+        status = "Authenticating…"
+        detail = "Using the pairing key stored securely on this iPhone."
+        try await ble.enableSecurity(key: credentials.encryptionKey)
+
+        isRefreshingDeviceInfo = true
+        deviceInfo = await ble.readDeviceInfo(existing: deviceInfo)
+        isRefreshingDeviceInfo = false
+        try Task.checkCancellation()
+
+        status = "Starting Specs Wi-Fi"
+        detail = "Opening the saved private network for this iPhone."
+        try await ble.startAccessPoint(ssid: credentials.ssid, password: credentials.password)
+
+        needsWiFiJoin = true
+        importPhase = .switchingWiFi
+        status = "Joining Specs Wi-Fi"
+        detail = "iOS is joining the accessory network approved during setup."
+        try await HotspotConnector().join(
+            ssid: credentials.ssid,
+            password: credentials.password,
+            peripheralIdentifier: credentials.peripheralIdentifier
+        )
+
+        do {
+            try await media.connectAndSetupWithRetry(maxAttempts: 4)
+        } catch {
+            status = "Waiting for Specs Wi-Fi"
+            detail = "The network is approved. iOS is finishing the connection."
+            try await media.connectAndSetupWithRetry(maxAttempts: 4)
+        }
+
         needsWiFiJoin = false
+        isSessionConnected = true
+        return media
+    }
+
+    private func syncClips(using media: AMBAClient, passive: Bool) async throws -> SyncResult {
+        isSyncInFlight = true
+        if !passive {
+            importPhase = .reading
+            status = "Reading the clip list…"
+            detail = "The connection stays open after this check."
+        }
+
+        let clips = try await media.listClipsWithRetry().filter { $0.video != nil }
+        let directory = try videoDirectory()
+        let manifest = loadVideoLibraryManifest(in: directory)
+        var pending: [PendingClip] = []
+
+        for (index, clip) in clips.enumerated() {
+            guard let video = clip.video else { continue }
+            let sourceFilename = sanitizeFilename(
+                clip.contentID,
+                fallback: String(format: "spectacles_%04d", index + 1)
+            ) + ".mp4"
+            let filename = manifest.renamedFiles[sourceFilename] ?? sourceFilename
+            let destination = directory.appendingPathComponent(filename)
+            let existingSize = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? -1
+            if existingSize != video.size {
+                pending.append(PendingClip(clip: clip, filename: filename, destination: destination))
+            }
+        }
+
+        totalClips = pending.count
+        guard !pending.isEmpty else {
+            progress = 1
+            currentClip = 0
+            clipProgress = 0
+            currentImportThumbnail = nil
+            isSyncInFlight = false
+            return SyncResult(catalogueCount: clips.count, importedCount: 0, savedToPhotos: 0)
+        }
+
+        isWorking = true
+        var newlyImported: [URL] = []
+        for (index, item) in pending.enumerated() {
+            importPhase = .downloading
+            currentClip = index + 1
+            clipProgress = 0
+            currentImportThumbnail = nil
+            status = "Importing \(index + 1) of \(pending.count)"
+            detail = "Preparing \(item.filename)"
+            if let thumbnailData = await media.thumbnailData(for: item.clip),
+               let thumbnail = UIImage(data: thumbnailData) {
+                currentImportThumbnail = thumbnail
+            }
+            detail = item.filename
+            try await media.download(clip: item.clip, to: item.destination) { [weak self] clipProgress in
+                Task { @MainActor in
+                    self?.clipProgress = clipProgress
+                    self?.progress = (Double(index) + clipProgress) / Double(pending.count)
+                }
+            }
+            currentImportThumbnail = await videoThumbnail(for: item.destination) ?? currentImportThumbnail
+            newlyImported.append(item.destination)
+        }
+
+        importPhase = .saving
+        status = "Saving to Photos…"
+        detail = "Allow add-only Photos access if iOS asks."
+        let savedToPhotos = try await PhotosSaver.add(videos: newlyImported)
+        refreshLibrary()
+        progress = 1
+        isSyncInFlight = false
+        return SyncResult(
+            catalogueCount: clips.count,
+            importedCount: newlyImported.count,
+            savedToPhotos: savedToPhotos
+        )
+    }
+
+    private func finishSuccessfulSync(_ result: SyncResult) {
+        lastSyncDate = Date()
+        progress = 1
+        importPhase = .complete
+        if result.importedCount > 0 {
+            status = result.importedCount == 1 ? "1 new video imported" : "\(result.importedCount) new videos imported"
+            detail = "\(result.savedToPhotos) added to Photos. Watching for new videos while Malibu stays open."
+        } else if result.catalogueCount == 0 {
+            status = "Connected"
+            detail = "No videos are on the glasses yet. Malibu is watching for new recordings."
+        } else {
+            status = "Connected"
+            detail = "Everything is up to date. New videos will import automatically."
+        }
+    }
+
+    private func scheduleLiveSync() {
+        liveSyncTask?.cancel()
+        guard isForeground, isPaired, isSessionConnected else { return }
+        liveSyncTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: 15_000_000_000)
+                    try Task.checkCancellation()
+                    guard self.isForeground,
+                          self.isSessionConnected,
+                          !self.isWorking,
+                          !self.isSyncInFlight,
+                          let media = self.activeMedia
+                    else { continue }
+
+                    let result = try await self.syncClips(using: media, passive: true)
+                    self.finishSuccessfulSync(result)
+                    self.isWorking = false
+
+                    if let ble = self.activeBLE, ble.isConnected,
+                       self.deviceInfo.lastUpdated.map({ Date().timeIntervalSince($0) > 60 }) ?? true {
+                        self.isRefreshingDeviceInfo = true
+                        self.deviceInfo = await ble.readDeviceInfo(existing: self.deviceInfo)
+                        self.isRefreshingDeviceInfo = false
+                    }
+                } catch is CancellationError {
+                    return
+                } catch {
+                    self.lastError = error.localizedDescription
+                    self.status = "Reconnecting…"
+                    self.detail = "The glasses connection dropped. Malibu is rebuilding it automatically."
+                    self.isWorking = false
+                    self.isSyncInFlight = false
+                    await self.endSession()
+                    guard self.isForeground else { return }
+                    self.liveSyncTask = nil
+                    self.importVideos()
+                    return
+                }
+            }
+        }
+    }
+
+    private func endSession() async {
+        let media = activeMedia
+        let ble = activeBLE
+        activeMedia = nil
+        activeBLE = nil
+        isSessionConnected = false
+        needsWiFiJoin = false
+        isRefreshingDeviceInfo = false
+        media?.close()
+        await ble?.stopAccessPoint()
+        ble?.disconnect()
     }
 
     private func makeImportCredentials(
