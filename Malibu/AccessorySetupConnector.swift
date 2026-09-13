@@ -104,26 +104,41 @@ final class AccessorySetupConnector {
     private func requireAuthorizationCompletion(
         peripheralIdentifier: UUID,
         ssid: String
-    ) async throws {
-        guard try await waitForAuthorizedAccessory(
+    ) async throws -> UUID {
+        guard let accessory = try await waitForAuthorizedAccessory(
             peripheralIdentifier: peripheralIdentifier,
             ssid: ssid
-        ) != nil else {
+        ) else {
             throw MalibuError.bluetoothUnavailable(
                 "iOS did not finish the one-time Spectacles network authorization"
             )
         }
+        guard let identifier = accessory.bluetoothIdentifier else {
+            throw MalibuError.bluetoothUnavailable(
+                "iOS authorized the Spectacles without exposing their Bluetooth identifier"
+            )
+        }
+        return identifier
     }
 
-    func isAuthorized(peripheralIdentifier: UUID, ssid: String) async throws -> Bool {
+    func authorizedBluetoothIdentifier(
+        peripheralIdentifier: UUID,
+        ssid: String
+    ) async throws -> UUID? {
         try await activate()
-        return authorizedAccessory(peripheralIdentifier: peripheralIdentifier, ssid: ssid) != nil
+        return authorizedAccessory(
+            peripheralIdentifier: peripheralIdentifier,
+            ssid: ssid
+        )?.bluetoothIdentifier
     }
 
-    func ensureAuthorized(peripheralIdentifier: UUID, ssid: String) async throws {
+    func ensureAuthorized(peripheralIdentifier: UUID, ssid: String) async throws -> UUID {
         try await activate()
-        if authorizedAccessory(peripheralIdentifier: peripheralIdentifier, ssid: ssid) != nil {
-            return
+        if let identifier = authorizedAccessory(
+            peripheralIdentifier: peripheralIdentifier,
+            ssid: ssid
+        )?.bluetoothIdentifier {
+            return identifier
         }
 
         if let existing = matchingAccessory(
@@ -131,11 +146,10 @@ final class AccessorySetupConnector {
             ssid: ssid
         ), existing.state == .awaitingAuthorization {
             try await finishAuthorization(for: existing, ssid: ssid)
-            try await requireAuthorizationCompletion(
+            return try await requireAuthorizationCompletion(
                 peripheralIdentifier: peripheralIdentifier,
                 ssid: ssid
             )
-            return
         }
 
         eventAccessory = nil
@@ -172,7 +186,7 @@ final class AccessorySetupConnector {
             try await finishAuthorization(for: accessory, ssid: ssid)
         }
 
-        try await requireAuthorizationCompletion(
+        return try await requireAuthorizationCompletion(
             peripheralIdentifier: peripheralIdentifier,
             ssid: ssid
         )

@@ -131,6 +131,8 @@ During fresh pairing, Malibu performs an X25519 key exchange, completes the Spec
 
 During setup, Malibu uses `AccessorySetupKit` to authorize the glasses as one Bluetooth and Wi-Fi accessory. During a session, Malibu authenticates over Bluetooth, reads device status through the recovered protobuf commands, asks the glasses to create a WPA2 access point with credentials derived from the saved pairing, and uses `joinAccessoryHotspot` to join that approved accessory automatically. It then connects to the media service at `192.168.42.1:1234`, downloads each clip's dedicated thumbnail file, and transfers the MP4. Malibu keeps the session active with catalogue and battery requests while it remains in the foreground. If the media connection drops, Malibu creates a fresh encrypted session and resumes the partial video.
 
+Before each connection, Malibu resolves the current Core Bluetooth identifier from the authorized `ASAccessory`. iOS can issue a different app-scoped identifier after the app is re-signed or reinstalled, so Malibu reconciles that identifier with the saved pairing instead of treating the radio as unavailable. The target also declares Apple's Hotspot Configuration capability required by `NEHotspotConfigurationManager` for the automatic Wi-Fi join.
+
 See [`docs/protocol.md`](docs/protocol.md) for the full reverse-engineered wire specification.
 
 ## Privacy

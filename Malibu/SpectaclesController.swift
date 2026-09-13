@@ -252,10 +252,17 @@ final class SpectaclesController: ObservableObject {
                     encryptionKey: key,
                     peripheralIdentifier: peripheralIdentifier
                 )
-                try await AccessorySetupConnector.shared.ensureAuthorized(
+                let authorizedIdentifier = try await AccessorySetupConnector.shared.ensureAuthorized(
                     peripheralIdentifier: peripheralIdentifier,
                     ssid: credentials.ssid
                 )
+                if authorizedIdentifier != peripheralIdentifier {
+                    try PairingKeyStore.save(
+                        key: key,
+                        peripheralIdentifier: authorizedIdentifier,
+                        networkSSID: credentials.ssid
+                    )
+                }
             }
 
             isPaired = true
@@ -292,24 +299,38 @@ final class SpectaclesController: ObservableObject {
             return
         }
 
-        let credentials = makeImportCredentials(
+        var credentials = makeImportCredentials(
             encryptionKey: encryptionKey,
             peripheralIdentifier: peripheralIdentifier
         )
 
         do {
             if #available(iOS 18.0, *) {
-                let isAuthorized = try await AccessorySetupConnector.shared.isAuthorized(
+                let authorizedIdentifier: UUID
+                if let currentIdentifier = try await AccessorySetupConnector.shared.authorizedBluetoothIdentifier(
                     peripheralIdentifier: peripheralIdentifier,
                     ssid: credentials.ssid
-                )
-                if !isAuthorized {
+                ) {
+                    authorizedIdentifier = currentIdentifier
+                } else {
                     importPhase = .pairing
                     status = "Approve your Spectacles once"
                     detail = "Tap Continue on the iPhone accessory card. Malibu will join the glasses automatically after this."
-                    try await AccessorySetupConnector.shared.ensureAuthorized(
+                    authorizedIdentifier = try await AccessorySetupConnector.shared.ensureAuthorized(
                         peripheralIdentifier: peripheralIdentifier,
                         ssid: credentials.ssid
+                    )
+                }
+
+                if authorizedIdentifier != peripheralIdentifier {
+                    try PairingKeyStore.save(
+                        key: encryptionKey,
+                        peripheralIdentifier: authorizedIdentifier,
+                        networkSSID: credentials.ssid
+                    )
+                    credentials = makeImportCredentials(
+                        encryptionKey: encryptionKey,
+                        peripheralIdentifier: authorizedIdentifier
                     )
                 }
             }

@@ -320,15 +320,38 @@ final class SpectaclesBLE: NSObject, @preconcurrency CBCentralManagerDelegate, @
         _ = central
         switch central.state {
         case .poweredOn: return
-        case .unsupported: throw MalibuError.bluetoothUnavailable("this iPhone does not support Bluetooth LE")
-        case .unauthorized: throw MalibuError.bluetoothUnavailable("permission was denied in Settings")
-        case .poweredOff: throw MalibuError.bluetoothUnavailable("turn Bluetooth on, then try again")
+        case .unsupported, .unauthorized, .poweredOff:
+            throw bluetoothStateError(central.state)
         case .resetting, .unknown:
             try await withCheckedThrowingContinuation { continuation in
                 powerContinuation = continuation
             }
         @unknown default:
             throw MalibuError.bluetoothUnavailable("unknown state")
+        }
+    }
+
+    private func bluetoothStateError(_ state: CBManagerState) -> MalibuError {
+        switch state {
+        case .unsupported:
+            return .bluetoothUnavailable("this iPhone does not support Bluetooth LE")
+        case .poweredOff:
+            return .bluetoothUnavailable("Bluetooth is turned off on this iPhone")
+        case .unauthorized:
+            switch CBManager.authorization {
+            case .denied:
+                return .bluetoothUnavailable("iOS denied Malibu access to Bluetooth")
+            case .restricted:
+                return .bluetoothUnavailable("Bluetooth access is restricted on this iPhone")
+            case .notDetermined:
+                return .bluetoothUnavailable("iOS has not authorized the paired Spectacles for Malibu")
+            case .allowedAlways:
+                return .bluetoothUnavailable("iOS did not expose the authorized Spectacles Bluetooth connection")
+            @unknown default:
+                return .bluetoothUnavailable("iOS returned an unknown Bluetooth authorization state")
+            }
+        default:
+            return .bluetoothUnavailable("iOS returned Bluetooth state \(state.rawValue)")
         }
     }
 
@@ -443,7 +466,7 @@ final class SpectaclesBLE: NSObject, @preconcurrency CBCentralManagerDelegate, @
             continuation.resume()
         case .unsupported, .unauthorized, .poweredOff:
             powerContinuation = nil
-            continuation.resume(throwing: MalibuError.bluetoothUnavailable("Bluetooth is not powered on or authorized"))
+            continuation.resume(throwing: bluetoothStateError(central.state))
         default: break
         }
     }

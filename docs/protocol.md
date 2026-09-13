@@ -52,6 +52,8 @@ sequenceDiagram
 
 Apple AccessorySetupKit is used only to authorize Bluetooth and Wi-Fi access on iOS. It does not change the Spectacles wire protocol.
 
+The Bluetooth identifier exposed by AccessorySetupKit is app-scoped and may change after re-signing or reinstalling Malibu. The encryption key, local user identity, and stable Spectacles network name remain valid. Before opening Core Bluetooth, Malibu matches the authorized `ASAccessory` by the stored SSID, reads its current `bluetoothIdentifier`, and updates the Keychain record if needed. This keeps iOS authorization and the protocol pairing identity synchronized without repeating the key exchange.
+
 ## How the protocol was reconstructed
 
 The reverse-engineering process used several independent sources of evidence:
