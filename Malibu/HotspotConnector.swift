@@ -4,29 +4,33 @@
 import Foundation
 import NetworkExtension
 
+enum HotspotJoinResult {
+    case joined
+    case requiresWiFiSettings
+}
+
 @MainActor
 final class HotspotConnector {
     func join(
         ssid: String,
         password: String,
         peripheralIdentifier: UUID
-    ) async throws {
+    ) async throws -> HotspotJoinResult {
         do {
             try await AccessorySetupConnector.shared.join(
                 peripheralIdentifier: peripheralIdentifier,
                 ssid: ssid,
                 password: password
             )
+            return .joined
         } catch {
             let failure = error as NSError
             if failure.domain == NEHotspotConfigurationErrorDomain {
                 if failure.code == 13 {
-                    return
+                    return .joined
                 }
                 if failure.code == 8 {
-                    throw MalibuError.networkFailure(
-                        "automatic Specs Wi-Fi needs Apple's Hotspot Configuration capability, but the installed signing profile does not provide it"
-                    )
+                    return .requiresWiFiSettings
                 }
                 throw MalibuError.networkFailure(
                     "iOS could not join the approved Specs Wi-Fi (Hotspot Configuration error \(failure.code))"

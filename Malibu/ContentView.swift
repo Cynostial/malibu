@@ -196,9 +196,9 @@ struct ContentView: View {
 
     private var wifiCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Joining Specs Wi-Fi", systemImage: "wifi")
+            Label("Specs Wi-Fi", systemImage: "wifi")
                 .font(.headline)
-            Text("iOS is connecting to the accessory network approved during setup.")
+            Text("If Malibu opens Wi-Fi settings, tap the Malibu network shown above and return. The active glasses connection stays open and importing continues automatically.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

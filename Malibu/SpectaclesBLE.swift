@@ -65,6 +65,7 @@ final class SpectaclesBLE: NSObject, @preconcurrency CBCentralManagerDelegate, @
     private var secure = false
 
     private var powerContinuation: CheckedContinuation<Void, Error>?
+    private var powerToken: UUID?
     private var scanContinuation: CheckedContinuation<CBPeripheral, Error>?
     private var scanToken: UUID?
     private var scanMode = ScanMode.pairedDevice
@@ -238,6 +239,11 @@ final class SpectaclesBLE: NSObject, @preconcurrency CBCentralManagerDelegate, @
 
     func disconnect() {
         central.stopScan()
+        powerToken = nil
+        if let continuation = powerContinuation {
+            powerContinuation = nil
+            continuation.resume(throwing: CancellationError())
+        }
         scanToken = nil
         if let continuation = scanContinuation {
             scanContinuation = nil
@@ -320,11 +326,29 @@ final class SpectaclesBLE: NSObject, @preconcurrency CBCentralManagerDelegate, @
         _ = central
         switch central.state {
         case .poweredOn: return
-        case .unsupported, .unauthorized, .poweredOff:
+        case .unsupported, .poweredOff:
             throw bluetoothStateError(central.state)
+        case .unauthorized:
+            if CBManager.authorization == .denied || CBManager.authorization == .restricted {
+                throw bluetoothStateError(central.state)
+            }
+            fallthrough
         case .resetting, .unknown:
+            let token = UUID()
             try await withCheckedThrowingContinuation { continuation in
+                powerToken = token
                 powerContinuation = continuation
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    guard let self, self.powerToken == token else { return }
+                    self.powerToken = nil
+                    self.powerContinuation = nil
+                    continuation.resume(
+                        throwing: MalibuError.bluetoothUnavailable(
+                            "iOS did not make the authorized Spectacles radio available within 3 seconds"
+                        )
+                    )
+                }
             }
         @unknown default:
             throw MalibuError.bluetoothUnavailable("unknown state")
@@ -463,10 +487,18 @@ final class SpectaclesBLE: NSObject, @preconcurrency CBCentralManagerDelegate, @
         switch central.state {
         case .poweredOn:
             powerContinuation = nil
+            powerToken = nil
             continuation.resume()
-        case .unsupported, .unauthorized, .poweredOff:
+        case .unsupported, .poweredOff:
             powerContinuation = nil
+            powerToken = nil
             continuation.resume(throwing: bluetoothStateError(central.state))
+        case .unauthorized:
+            if CBManager.authorization == .denied || CBManager.authorization == .restricted {
+                powerContinuation = nil
+                powerToken = nil
+                continuation.resume(throwing: bluetoothStateError(central.state))
+            }
         default: break
         }
     }

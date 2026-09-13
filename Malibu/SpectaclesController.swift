@@ -71,6 +71,9 @@ final class SpectaclesController: ObservableObject {
     private var didStartAutomatically = false
     private var isForeground = true
     private var isSyncInFlight = false
+    private var isOpeningWiFiSettings = false
+    private var didReturnFromWiFiSettings = false
+    private var wiFiSettingsContinuation: CheckedContinuation<Void, Never>?
 
     init() {
         ProtocolSelfTest.run()
@@ -94,6 +97,16 @@ final class SpectaclesController: ObservableObject {
 
     func sceneBecameActive() {
         isForeground = true
+        if isOpeningWiFiSettings {
+            didReturnFromWiFiSettings = true
+            if let continuation = wiFiSettingsContinuation {
+                wiFiSettingsContinuation = nil
+                isOpeningWiFiSettings = false
+                didReturnFromWiFiSettings = false
+                continuation.resume()
+            }
+            return
+        }
         if !didStartAutomatically {
             startAutomaticImportIfReady()
         } else if isSessionConnected {
@@ -115,6 +128,9 @@ final class SpectaclesController: ObservableObject {
 
     func sceneEnteredBackground() {
         isForeground = false
+        if isOpeningWiFiSettings {
+            return
+        }
         liveSyncTask?.cancel()
         liveSyncTask = nil
         operationTask?.cancel()
@@ -484,15 +500,13 @@ final class SpectaclesController: ObservableObject {
         }
 
         await endSession()
-        let ble = SpectaclesBLE()
         let media = AMBAClient(encryptionKey: credentials.encryptionKey)
-        activeBLE = ble
         activeMedia = media
 
         importPhase = .locating
         status = "Looking for your Spectacles…"
         detail = "Keep them close to the iPhone."
-        try await ble.connect(knownIdentifier: credentials.peripheralIdentifier)
+        let ble = try await connectToSpectaclesWithRetry(credentials.peripheralIdentifier)
 
         importPhase = .authenticating
         status = "Authenticating…"
@@ -512,11 +526,19 @@ final class SpectaclesController: ObservableObject {
         importPhase = .switchingWiFi
         status = "Joining Specs Wi-Fi"
         detail = "iOS is joining the accessory network approved during setup."
-        try await HotspotConnector().join(
+        let joinResult = try await HotspotConnector().join(
             ssid: credentials.ssid,
             password: credentials.password,
             peripheralIdentifier: credentials.peripheralIdentifier
         )
+
+        if case .requiresWiFiSettings = joinResult {
+            status = "Select Specs Wi-Fi"
+            detail = "Opening Settings > Wi-Fi. Tap \(credentials.ssid), then return to Malibu."
+            try await openWiFiSettingsAndWait()
+            status = "Connecting to Specs Wi-Fi"
+            detail = "Continuing the import automatically."
+        }
 
         do {
             try await media.connectAndSetupWithRetry(maxAttempts: 4)
@@ -529,6 +551,73 @@ final class SpectaclesController: ObservableObject {
         needsWiFiJoin = false
         isSessionConnected = true
         return media
+    }
+
+    private func connectToSpectaclesWithRetry(_ peripheralIdentifier: UUID) async throws -> SpectaclesBLE {
+        var lastError: Error = MalibuError.glassesNotFound
+        for attempt in 1...4 {
+            try Task.checkCancellation()
+            let ble = SpectaclesBLE()
+            activeBLE = ble
+            do {
+                try await ble.connect(knownIdentifier: peripheralIdentifier)
+                return ble
+            } catch {
+                lastError = error
+                ble.disconnect()
+                activeBLE = nil
+                guard shouldRetryBluetooth(error), attempt < 4 else {
+                    throw error
+                }
+                status = "Waking Bluetooth"
+                detail = "iOS is still exposing the paired glasses. Retrying automatically (\(attempt + 1) of 4)."
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+        throw lastError
+    }
+
+    private func shouldRetryBluetooth(_ error: Error) -> Bool {
+        guard let malibuError = error as? MalibuError else {
+            return false
+        }
+        switch malibuError {
+        case .bluetoothUnavailable(let detail):
+            return !detail.contains("turned off")
+                && !detail.contains("denied")
+                && !detail.contains("restricted")
+                && !detail.contains("does not support")
+        default:
+            return false
+        }
+    }
+
+    private func openWiFiSettingsAndWait() async throws {
+        guard let settingsURL = URL(string: "App-Prefs:root=WIFI") else {
+            throw MalibuError.networkFailure("could not create the iPhone Wi-Fi settings link")
+        }
+
+        isOpeningWiFiSettings = true
+        didReturnFromWiFiSettings = false
+        let opened = await withCheckedContinuation { continuation in
+            UIApplication.shared.open(settingsURL, options: [:]) { opened in
+                continuation.resume(returning: opened)
+            }
+        }
+        guard opened else {
+            isOpeningWiFiSettings = false
+            throw MalibuError.networkFailure("iOS would not open the Wi-Fi settings page")
+        }
+
+        if didReturnFromWiFiSettings {
+            isOpeningWiFiSettings = false
+            didReturnFromWiFiSettings = false
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            wiFiSettingsContinuation = continuation
+        }
     }
 
     private func syncClips(using media: AMBAClient, passive: Bool) async throws -> SyncResult {

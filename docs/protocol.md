@@ -451,6 +451,8 @@ An installation upgrading from an older Malibu version already has the iOS perip
 
 When a foreground session starts, Malibu starts the access point through command 21 and calls `joinAccessoryHotspot` with the authorized accessory and derived passphrase. This avoids a Settings or Control Center handoff when the installed app's provisioning profile contains the Hotspot Configuration entitlement. Apple does not provision that capability for free Personal Team signing profiles, and iOS returns `NEHotspotConfigurationError.internal` with code 8 when the entitlement is absent.
 
+On error 8, Malibu keeps the authenticated BLE connection and command 21 access point alive, opens the iOS Wi-Fi page with `App-Prefs:root=WIFI`, and suspends the import state machine. Returning to Malibu resumes at the media TCP connection instead of restarting pairing or access-point setup. Core Bluetooth initialization also tolerates the transient unauthorized state that AccessorySetupKit can report while iOS exposes an authorized accessory, then retries the complete Bluetooth manager up to four times before surfacing a failure.
+
 `joinAccessoryHotspot` creates a temporary accessory join. iOS does not provide a flag that makes this association permanent. Malibu therefore keeps the BLE, access-point, and media connections active while the app remains in the foreground. It polls the catalogue every 15 seconds and refreshes device status about once a minute. When the app returns from the background, it repeats command 113, command 21, the automatic accessory join, and media nonce setup without asking the user to pair again.
 
 ## Media transport
